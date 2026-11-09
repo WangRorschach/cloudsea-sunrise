@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>方法文档 · 云海·日出 预测台</title>
+  <link rel="stylesheet" href="https://unpkg.com/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://unpkg.com/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://unpkg.com/katex@0.16.11/dist/contrib/auto-render.min.js"
+    onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]})"></script>
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    body { background: var(--ink-0); }
+    .doc { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; max-width: 1160px; margin: 0 auto; padding: 28px 24px 60px; }
+    .toc { position: sticky; top: 72px; align-self: start; font-size: var(--fs-sm); }
+    .toc a { display: block; padding: 5px 10px; color: var(--text-2); text-decoration: none; border-radius: 6px; }
+    .toc a:hover { background: var(--ink-2); color: var(--text); }
+    article { max-width: 74ch; font-size: 1rem; line-height: 1.8; color: #d6deeb; }
+    article h1 { font-size: 2rem; line-height: 1.25; margin: 0 0 12px; color: var(--text); letter-spacing: 0.01em; }
+    article h2 { font-size: 1.375rem; margin: 2.6em 0 0.6em; color: var(--text); scroll-margin-top: 72px; }
+    article h3 { font-size: 1.0625rem; margin: 1.8em 0 0.4em; color: var(--dawn); }
+    article p, article li { color: #ccd5e3; }
+    article strong { color: var(--text); }
+    article code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.875em; background: var(--ink-2); padding: 1px 5px; border-radius: 4px; }
+    .lead { font-size: 1.0625rem; color: var(--text-2); }
+    .katex-display { overflow-x: auto; overflow-y: hidden; padding: 6px 0; }
+    .note { padding: 12px 16px; background: var(--ink-1); border: 1px solid var(--line-2); border-radius: var(--r); margin: 1.2em 0; }
+    .note.warn { border-color: rgba(255, 207, 92, 0.45); }
+    table { margin: 1em 0; }
+    td, th { text-align: left !important; white-space: normal; }
+    figure { margin: 1.4em 0; }
+    figure svg { width: 100%; height: auto; display: block; background: var(--ink-1); border: 1px solid var(--line); border-radius: var(--r); }
+    figcaption { font-size: var(--fs-xs); color: var(--text-3); margin-top: 6px; }
+    ol.refs li { font-size: var(--fs-sm); margin-bottom: 6px; }
+    @media (max-width: 860px) { .doc { grid-template-columns: 1fr; } .toc { position: static; display: flex; flex-wrap: wrap; gap: 2px; } }
+    @media (max-width: 640px) {
+      .top { position: static; }
+      .doc { gap: 16px; padding: 16px 16px 48px; }
+      .toc { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 0 12px; -webkit-overflow-scrolling: touch; }
+      .toc a { white-space: nowrap; background: var(--ink-2); }
+      article { font-size: 0.9375rem; line-height: 1.75; min-width: 0; overflow-wrap: anywhere; }
+      article h1 { font-size: 1.5rem; }
+      article table { display: block; overflow-x: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="38" r="13" fill="#ffb347"/><path d="M2 44c9-7 18-7 27 0s18 7 33 0v18H2z" fill="#eef3fb"/></svg>
+      <span>云海·日出 <em>预测台</em></span>
+    </a>
+    <nav class="tabs"><a href="./">← 返回预测</a></nav>
+  </header>
+
+  <div class="doc">
+    <nav class="toc" aria-label="目录">
+      <a href="#overview">概览</a>
+      <a href="#data">数据来源</a>
+      <a href="#physics">云海是怎么形成的</a>
+      <a href="#seamodel">云海诊断模型</a>
+      <a href="#geometry">日出光路几何</a>
+      <a href="#sunmodel">日出可见度与朝霞</a>
+      <a href="#ensemble">多模式集合</a>
+      <a href="#map">3D 地图与图层</a>
+      <a href="#verify">观测与检验</a>
+      <a href="#limits">局限性</a>
+      <a href="#safety">徒步安全</a>
+      <a href="#refs">参考文献</a>
+    </nav>
+
+    <article>
+      <h1>云海与日出预测：方法说明</h1>
+      <p class="lead">本页说明预测台的每一个数字从何而来。所有计算都在你的浏览器中完成，源代码中的公式与本文一一对应，可以复核。</p>
+
+      <h2 id="overview">概览</h2>
+      <p>站在山顶看到云海，需要三件事同时成立：<strong>山下有云</strong>、<strong>云顶低于你</strong>、<strong>你头顶是通透的</strong>。看到日出，则要求从你到太阳的那条几百公里长的光路上<strong>没有厚云遮挡</strong>。预测台把这两个问题分开处理：</p>
+      <ol>
+        <li>从 5 个全球数值模式下载观测点上空 1000–500 hPa 共 11 层的温度、湿度、位势高度、云量与风，重建垂直廓线，诊断低层云的云顶高度与稳定性；</li>
+        <li>用天文算法求出日出时刻与方位，再按地球曲率和大气折射计算日出光线的高度，并沿光路在 10–280 km 处采样各模式的低、中、高云量；</li>
+        <li>把各模式的结果放在一起，给出集合平均与模式范围，用分歧大小表示置信度。</li>
+      </ol>
+      <div class="note warn"><strong>概率的含义。</strong>页面上的“云海概率”和“日出可见”是由物理诊断组合出的 0–100 指数，<strong>尚未经过统计校准</strong>。它们的排序（哪天更好）比绝对数值更可靠。记录现场观测后，“观测与检验”页会计算 Brier 评分，告诉你这些数字在你常去的山上有多可信。</div>
+
+      <h2 id="data">数据来源</h2>
+      <table>
+        <thead><tr><th>数据</th><th>来源</th><th>用途</th></tr></thead>
+        <tbody>
+          <tr><td>数值预报（逐小时、7 天）</td><td>Open-Meteo 转发的 ECMWF IFS 0.25°、NCEP GFS、DWD ICON、CMA GRAPES、JMA GSM</td><td>气压层廓线、地面要素、云量</td></tr>
+          <tr><td>观测点与谷底海拔、光路地形</td><td>Copernicus GLO-90 DEM（Open-Meteo Elevation API）</td><td>谷底高度、相对高差、地形遮挡</td></tr>
+          <tr><td>3D 地形瓦片</td><td>Mapterhorn（Copernicus GLO-30 为主，512 px Terrarium 编码，中国区最大 z12 ≈ 20 m/像素）</td><td>3D 地图、等高线、云海淹没面</td></tr>
+          <tr><td>地点搜索</td><td>OpenStreetMap：预置山区离线地点包（<code>tools/build-pois.py</code> 生成）+ Overpass 周边 40 km 实时检索 + Nominatim；Open-Meteo 地名库</td><td>搜索客栈、山峰、观景台、索道站、村庄；地图标注</td></tr>
+          <tr><td>气溶胶</td><td>CAMS 全球气溶胶预报</td><td>AOD、PM2.5、沙尘 → 朝霞色彩</td></tr>
+          <tr><td>卫星观测</td><td>NASA GIBS：向日葵-9 AHI 第 13 波段红外、MODIS Terra 真彩</td><td>对照实况云系</td></tr>
+          <tr><td>底图</td><td>Esri World Imagery、OpenTopoMap</td><td>背景</td></tr>
+        </tbody>
+      </table>
+      <p>模式数据按观测点海拔做了高度订正（<code>elevation</code> 参数）。不同模式提供的气压层并不完全相同：ECMWF 0.25° 与 JMA 缺 975/950/900/750 hPa，CMA GRAPES 只提供约 5 天。缺层会降低垂直分辨率，在模式表中可以对比。</p>
+
+      <h2 id="physics">云海是怎么形成的</h2>
+      <p>云海是一层<strong>顶部被压平的低云或雾</strong>。压平它的是<strong>逆温层</strong>：通常气温随高度降低，但在逆温层中气温随高度升高，下方湿冷空气无法继续上升，云顶就被“封”在一个高度上。主要有三种情形：</p>
+      <h3>A 型：层积云型（平流 / 锋后）</h3>
+      <p>大尺度下沉气流在 1–2.5 km 形成下沉逆温，边界层内湿空气饱和成层积云，云顶平整，可以持续整天。江南、四川盆地冬春季的大片云海多属此类。</p>
+      <h3>B 型：辐射雾 / 谷雾型</h3>
+      <p>晴朗、弱风的夜晚，地面辐射降温，冷空气沿坡下沉汇入山谷，谷底降到露点成雾。雾顶通常只比谷底高 100–500 m，日出后 1–2 小时消散。适合中低海拔山峰。</p>
+      <h3>雨后放晴</h3>
+      <p>降水使低层空气接近饱和，雨停后若上空转干、出现下沉，低层云最容易被“压”成云海。模型对过去 24 小时降水 ≥ 2 mm 且当时无降水的情形加分。</p>
+
+      <figure>
+        <svg viewBox="0 0 640 220" role="img" aria-label="云海示意：逆温层压住云顶">
+          <defs><linearGradient id="sk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b2a4a"/><stop offset="1" stop-color="#f2b47a"/></linearGradient></defs>
+          <rect width="640" height="220" fill="url(#sk)" opacity=".55"/>
+          <path d="M0 220 L90 120 L150 165 L250 40 L330 150 L420 90 L520 170 L640 110 L640 220Z" fill="#2c3a33"/>
+          <path d="M0 150 Q160 140 320 150 T640 148 L640 220 L0 220Z" fill="#eef3fb" opacity=".93"/>
+          <path d="M0 220 L90 120 L110 142 L60 220Z M228 70 L250 40 L272 72 Z M410 102 L420 90 L430 104Z" fill="#2c3a33"/>
+          <line x1="0" y1="140" x2="640" y2="140" stroke="#ffb347" stroke-dasharray="6 4"/>
+          <text x="10" y="132" fill="#ffd9a8" font-size="13">逆温层（位温随高度快速增加）</text>
+          <text x="10" y="180" fill="#25324a" font-size="13">饱和湿空气 RH ≥ 92%</text>
+          <circle cx="250" cy="36" r="5" fill="#ffb347"/><text x="262" y="40" fill="#fff" font-size="13">观测点</text>
+          <text x="430" y="40" fill="#fff" font-size="13">高度裕度 = 观测海拔 − 云顶</text>
+        </svg>
+        <figcaption>云顶低于观测点、上方有逆温封盖、观测点上空干燥，是成片云海的三要素。</figcaption>
+      </figure>
+
+      <h2 id="seamodel">云海诊断模型</h2>
+      <h3>1. 重建垂直廓线</h3>
+      <p>对每个模式、每个小时，取 11 个气压层的位势高度 \(z\)、气温 \(T\)、相对湿度 RH、云量与风速，剔除低于谷底的外推层，按高度排序。露点由 Magnus 公式（Alduchov &amp; Eskridge 1996 系数）计算：</p>
+      $$\gamma = \ln\frac{RH}{100} + \frac{aT}{b+T},\qquad T_d = \frac{b\,\gamma}{a-\gamma},\qquad a=17.625,\; b=243.04\,{}^{\circ}\mathrm{C}$$
+      <p>位温消除了气压变化的影响，用来判断稳定度：</p>
+      $$\theta = (T+273.15)\left(\frac{1000}{p}\right)^{0.2857}$$
+      <p>相邻两层的位温梯度 \(\partial\theta/\partial z\)（K/km）是封盖强度的核心指标：中性层约为 0，标准大气约 3–4 K/km，强逆温可超过 10 K/km。</p>
+
+      <h3>2. 寻找云层与云顶</h3>
+      <p><strong>A 型</strong>：在观测点以上 1000 m 内，自下而上寻找第一段连续“饱和层”（\(RH \ge 92\%\) 或模式云量 \(\ge 70\%\)）。云顶取 RH 降到 90% 处的线性插值高度：</p>
+      $$z_{top} = z_k + (z_{k+1}-z_k)\,\frac{RH_k - 90}{RH_k - RH_{k+1}}$$
+      <p><strong>B 型</strong>：由近地层露点差 \(T-T_d\)、低层风速、中高云遮蔽、最低层稳定度与夜间因子相乘得到雾的可能性；雾顶取位温梯度 ≥ 6 K/km 的连续稳定层顶，并限制在谷底以上 100–500 m。两者取更可信的一种。</p>
+
+      <h3>3. 综合概率</h3>
+      $$P_{sea} = 100 \cdot F_{cloud}\cdot F_{height}\cdot Q$$
+      $$Q = \exp\!\big(0.35\ln F_{cap} + 0.30\ln F_{dry} + 0.15\ln F_{wind} + 0.20\ln F_{precip}\big)$$
+      <ul>
+        <li>\(F_{cloud}\)：成云强度，取饱和层的最大 RH/云量与云层厚度；云顶需高于谷底 250 m 以上才算“有海”。</li>
+        <li>\(F_{height}\)：高度裕度 \(\Delta z = z_{obs} - z_{top}\) 的分段函数：\(\Delta z < -200\) m（身处云中）为 0，0 m 为 0.2，200–1200 m 为 1，再高则云海显得遥远，逐渐降到 0.35。</li>
+        <li>\(F_{cap}\)：\(0.7\,f(\partial\theta/\partial z) + 0.3\,f(\Delta RH)\)，衡量云顶附近的逆温强度和湿度跃变。</li>
+        <li>\(F_{dry}\)：观测点高度的 RH 与中、高云量，代表“头顶通透”。</li>
+        <li>\(F_{wind}\)：观测高度风速，强风会搅乱云顶。\(F_{precip}\)：降水惩罚。</li>
+      </ul>
+      <p>\(Q\) 用加权几何平均，意味着任一条件极差都会显著拉低结果，而不会被其他好条件“平均掉”。每天的云海概率取日出前 100 分钟到日出后 50 分钟内的最大值。</p>
+
+      <h2 id="csdetail">云海详细预报怎么读</h2>
+      <ul>
+        <li><b>云海时段</b>：逐小时集合平均概率 ≥ 20% 的连续小时合并为一个时段，并给出类型（层积云型 / 辐射雾·谷雾型，按模式投票）、云顶范围、云底、相对观测点的高差、峰值时刻和各模式分别给出的概率。</li>
+        <li><b>主要限制因子</b>：在成云、高度裕度、逆温封盖、上层干燥、风、降水这 6 个因子（0–1，1 为最有利）中取最小的一项。没有成云时，不再讨论高度裕度。</li>
+        <li><b>7×24 热力图</b>：显示每小时的集合概率，橙线标出日出所在的小时。点击任意格子，地图、3D 云面和逐小时诊断会同步切换到该小时。</li>
+        <li><b>周边覆盖率</b>：以观测点为中心，在 10 km 内按环形网格采样 DEM，统计海拔低于预测云顶的格点所占比例，粗略估计脚下会被云海铺满的面积。</li>
+        <li><b>周边观景点对比</b>：取 12 km 内 OSM 中的山峰、观景台、客栈和索道站，判断此刻它们位于云上还是云中。海拔带 * 的点是从 DEM 补全的。点击一行即可切换到该点重新预报。</li>
+        <li><b>3D 云海面</b>：一个 WebGL 自定义图层。在预测云顶高度（乘以地形夸张系数）处绘制 4 层分形噪声云，与地形做深度遮挡，所以高于云顶的山脊会露出来。云的疏密随低云量变化，不透明度随概率变化，色调按夜间、清晨、白天切换。集合概率低于 8% 时不绘制。</li>
+      </ul>
+      <h2 id="geometry">日出光路几何</h2>
+      <h3>太阳位置</h3>
+      <p>采用 NOAA 太阳计算器的 Meeus 算法求太阳赤纬、时差和时角，精度约 1 分钟。日出定义为太阳<strong>上缘</strong>与视地平相切。</p>
+      <h3>眼高差与大气折射</h3>
+      <p>站得越高，地平线越低。考虑标准大气折射（折射系数 \(k = 0.13\)），等效地球半径 \(R_{eff} = R/(1-k)\)，眼高差为：</p>
+      $$\delta = \sqrt{\frac{2h}{R_{eff}}}$$
+      <p>海拔 1800 m 时 \(\delta \approx 1.29^\circ\)，日出因此比海平面提前约 6–8 分钟。视高度 \(h_a\) 处的折射用 Bennett (1982) 公式：</p>
+      $$R(h_a) = \frac{1}{60}\cot\!\left(h_a + \frac{7.31}{h_a + 4.4}\right)\ \text{(度)}$$
+      <p>太阳中心的几何高度目标为 \(-\alpha - R(\alpha) - 0.2666^\circ\)，其中 \(\alpha\) 是视地平高度角，0.2666° 是太阳视半径。</p>
+      <h3>地形遮挡</h3>
+      <p>沿日出方位每隔 0.5–12 km 采样 300 km 地形剖面，计算每个点的视高度角：</p>
+      $$\alpha_{terrain}(x) = \arctan\!\left(\frac{z_g(x) - h}{x} - \frac{x}{2R_{eff}}\right)$$
+      <p>若最大值高于 \(-\delta\)，说明远山挡住了地平线，实际日出推迟。页面同时给出海平面、山顶和地形修正三种日出时刻。</p>
+      <h3>光线高度</h3>
+      <p>日出瞬间，到达观测点的光线在距离 \(x\) 处的海拔为：</p>
+      $$H(x) = h + x\tan\alpha + \frac{x^2}{2R_{eff}}$$
+      <p>光线在观测点附近最低，往远处逐渐抬升：1800 m 的山顶，光线约在 160 km 处掠过海平面，280 km 处已升到约 2.3 km。所以<strong>远方的低云和中云决定了日出能否看到</strong>，本地晴朗并不够。</p>
+
+      <h2 id="sunmodel">日出可见度与朝霞</h2>
+      <p>在光路 10、30、70、130、200、280 km 处读取各模式的低、中、高云量 \(c\)，假设低云分布在 0 至 \(z_{low}\)（若诊断出 A 型云海则取其云顶，否则 2 km）、中云 3–8 km、高云 8–12 km，计算光线穿过每层的透过率：</p>
+      $$t_i = \prod_{layer}\left[1 - w\,c\,\mathrm{clip}\!\left(\frac{z_{top} - H(x_i)}{z_{top}-z_{base}}\right)\right],\quad w = 1,\,0.85,\,0.35$$
+      $$P_{vis} = 100\cdot \exp\!\Big(1.5\,\overline{\ln t_i}\Big)\cdot(1-I_{cloud})\cdot F_{precip}$$
+      <p>其中 \(I_{cloud}\) 是观测点身处云中的程度（由云顶裕度和观测高度 RH 推断）。高云对光线衰减较弱，权重最低。</p>
+      <h3>朝霞指数</h3>
+      <p>好看的朝霞需要<strong>头顶有被照亮的“画布”</strong>（30–60% 的中高云），同时<strong>远方地平线是通透的</strong>，太阳光才能从下方照到云底。适量气溶胶（AOD 0.1–0.35）会增强红橙色，过多则发灰：</p>
+      $$G = 100\cdot F_{canvas}\cdot t_{far}^{0.8}\cdot F_{aer}(AOD)\cdot F_{precip}\cdot(1-0.7I_{cloud})$$
+      <p>\(t_{far}\) 是 120 km 以外采样点的平均透过率。</p>
+
+      <h2 id="ensemble">多模式集合</h2>
+      <p>同一天的天气，不同模式会给出不同答案。预测台对每个模式独立做完整诊断，再取平均值作为主结果，最小值–最大值作为范围，用标准差表示一致性：σ &lt; 10 为“置信度高”，10–20 为“中”，&gt; 20 为“低”。这比单一模式更诚实：<strong>模式分歧大的日子，结果本来就不确定</strong>。</p>
+      <p>局限：5 个模式并非独立样本（共享观测资料与相似物理过程），等权平均也未按各模式在当地的历史表现加权。</p>
+
+      <h2 id="map">3D 地图与图层</h2>
+      <ul>
+        <li><strong>操控</strong>：手机上单指拖动平移，双指捏合缩放、扭转旋转、同时上下推调整俯仰，三种动作可以同时进行。点「⟲ 旋转」后，单指拖动会绕观测点旋转，松手带惯性。电脑上可以用右键拖动或 Ctrl+拖动来旋转。</li>
+        <li><strong>预测云海面</strong>：把所选时刻的集合云顶高度当作一个水平面，DEM 中低于该高度的山谷被渲染成云。随时间滑块变化，夜间偏蓝灰、晨昏偏暖。这是示意，真实云顶不会完全水平。</li>
+        <li><strong>等高线</strong>：由 DEM 瓦片实时生成，随缩放细化到 10 m。</li>
+        <li><strong>海拔分层设色</strong>：按海拔着色，便于判断哪些山脊会露出云面。</li>
+        <li><strong>日出光路</strong>：橙色虚线为当天日出方位，圆点为远方云量采样点，数字为该点的光线透过率。</li>
+        <li><strong>卫星观测</strong>：向日葵-9 第 13 波段（10.4 μm）红外云图每 10 分钟一帧，亮白为冷云顶，昼夜可用；MODIS 真彩为每日一景，可直接看到白天的云海和雾。</li>
+      </ul>
+
+      <h2 id="verify">观测与检验</h2>
+      <p>每次加载预测，浏览器会为每一天保存一份“快照”，并保留<strong>提前量最接近 24 小时</strong>的那一版，避免用日出后看到的预测去检验自己。记录现场观测时，它会自动配对。</p>
+      $$BS = \frac{1}{N}\sum_{i=1}^{N}(p_i - o_i)^2,\qquad BSS = 1 - \frac{BS}{\bar o(1-\bar o)}$$
+      <p>\(p_i\) 为预测概率，\(o_i\) 为实况（看到成片或零散云海记为 1）。BSS &gt; 0 表示比“总按历史发生频率猜”更好。另以 50% 为阈值给出命中率 POD、空报率 FAR 与临界成功指数 CSI。积累 20–30 次后，结果才有统计意义。数据只存在本机浏览器，可导出 JSON 备份或分享。</p>
+
+      <h2 id="limits">局限性</h2>
+      <ul>
+        <li><strong>分辨率</strong>：全球模式格距 10–25 km，无法分辨单个山谷。B 型谷雾和局地地形云的预报能力有限。</li>
+        <li><strong>垂直分辨率</strong>：低层只有 4–6 个气压层，云顶高度误差常在 ±150–300 m，云顶贴近观测点时结论最不可靠。</li>
+        <li><strong>云量的定义</strong>：模式的低、中、高云量是格点平均，不能区分“一整片”和“碎云”。</li>
+        <li><strong>未校准</strong>：各因子的分段函数来自气象原理与经验，不是统计拟合。</li>
+        <li><strong>坐标</strong>：预置观景点为近似坐标，与 DEM 差异超过 250 m 时页面会提示。</li>
+      </ul>
+
+      <h2 id="safety">徒步安全</h2>
+      <p>看日出意味着夜间登山。页面给出的建议到达时间为日出前 40 分钟，并提示低温、强阵风、零度层低于山顶（结冰）、降水与低能见度等风险。请务必：</p>
+      <ul>
+        <li>以当地气象部门的预警和景区公告为准，雷暴、大风和暴雨天气不要出发；</li>
+        <li>携带头灯、保暖层、防风外套和足够的水；结冰路段使用冰爪；</li>
+        <li>身处云雾中时能见度可能不足 20 m，按标记路线行走，不要离开步道；</li>
+        <li>告知他人行程，注意手机信号与电量。</li>
+      </ul>
+
+      <h2 id="refs">参考文献</h2>
+      <ol class="refs">
+        <li>Meeus, J. (1998). <em>Astronomical Algorithms</em>, 2nd ed. Willmann-Bell.（NOAA Solar Calculator 实现）</li>
+        <li>Bennett, G. G. (1982). The calculation of astronomical refraction in marine navigation. <em>Journal of Navigation</em>, 35(2), 255–259.</li>
+        <li>Alduchov, O. A., &amp; Eskridge, R. E. (1996). Improved Magnus form approximation of saturation vapor pressure. <em>J. Appl. Meteor.</em>, 35, 601–609.</li>
+        <li>Stull, R. B. (2017). <em>Practical Meteorology: An Algebra-based Survey of Atmospheric Science</em>. UBC.</li>
+        <li>Wallace, J. M., &amp; Hobbs, P. V. (2006). <em>Atmospheric Science: An Introductory Survey</em>, 2nd ed. Academic Press.</li>
+        <li>Gultepe, I., et al. (2007). Fog research: A review of past achievements and future perspectives. <em>Pure Appl. Geophys.</em>, 164, 1121–1159.</li>
+        <li>Brier, G. W. (1950). Verification of forecasts expressed in terms of probability. <em>Mon. Wea. Rev.</em>, 78, 1–3.</li>
+        <li>Corfidi, S. F. The colors of sunset and twilight. NOAA/NWS Storm Prediction Center.</li>
+        <li>Open-Meteo (open-meteo.com)；Copernicus DEM；CAMS Global Atmospheric Composition Forecasts；NASA GIBS。</li>
+      </ol>
+    </article>
+  </div>
+<script>
+  // 在预测页内以弹层打开时，隐藏“返回”导航（由外层的“关闭”按钮负责）
+  if (window.parent !== window) document.querySelector('.top')?.remove();
+</script>
+</body>
+</html>

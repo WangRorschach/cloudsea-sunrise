@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1524" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="云海日出" />
+  <title>云海·日出 预测台 —— 徒步登山的科学云海与日出预报</title>
+  <meta name="description" content="基于多模式数值预报气压层廓线、3D 地形与日出光路几何的云海与日出预测。" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='38' r='14' fill='%23ffb347'/%3E%3Cpath d='M4 44c8-6 16-6 24 0s16 6 32 0v16H4z' fill='%23eef3fb'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.17.0/dist/maplibre-gl.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script src="https://unpkg.com/maplibre-gl@5.17.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/maplibre-contour@0.1.1/dist/index.min.js"></script>
+  <script src="https://unpkg.com/chart.js@4.4.6/dist/chart.umd.js"></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="./">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="38" r="13" fill="#ffb347"/><path d="M2 44c9-7 18-7 27 0s18 7 33 0v18H2z" fill="#eef3fb"/></svg>
+      <span>云海·日出 <em>预测台</em></span>
+    </a>
+    <div class="search">
+      <input id="q" type="search" placeholder="搜索山名、客栈、观景台、村庄或坐标" autocomplete="off" />
+      <ul id="q-results" class="dropdown" hidden></ul>
+    </div>
+    <select id="spot" aria-label="预置观景点"></select>
+    <label class="alt"><span class="lbl">观测海拔</span>
+      <input id="alt" type="number" inputmode="numeric" step="1" min="-100" max="8900" placeholder="海拔" /> m
+    </label>
+    <button id="reload" class="btn">重新计算</button>
+    <nav class="tabs">
+      <button data-tab="forecast" class="active">预测</button>
+      <button data-tab="obs">观测与检验</button>
+      <a href="docs.html" target="_blank" rel="noopener" id="docs-link">方法文档 ↗</a>
+    </nav>
+  </header>
+
+  <main id="tab-forecast" class="tab">
+    <section class="map-wrap">
+      <div id="map"></div>
+      <div class="map-tools card">
+        <button class="btn toggle" id="tools-toggle" type="button" aria-expanded="true">图层与工具</button>
+        <div class="row"><b>底图</b>
+          <label><input type="radio" name="base" value="esri" checked /> 卫星影像</label>
+          <label><input type="radio" name="base" value="topo" /> 地形图</label>
+        </div>
+        <div class="row"><b>图层</b>
+          <label><input type="checkbox" id="lyr-cloud" checked /> 预测云海面</label>
+          <label><input type="checkbox" id="lyr-contours" checked /> 等高线</label>
+          <label><input type="checkbox" id="lyr-hypso" /> 海拔分层设色</label>
+          <label><input type="checkbox" id="lyr-ray" checked /> 日出光路</label>
+        </div>
+        <div class="row"><b>卫星观测</b>
+          <select id="sat"><option value="none">关闭</option><option value="himawari">向日葵-9 红外云图</option><option value="modis">MODIS 真彩（日）</option></select>
+          <select id="sat-time" hidden></select>
+          <input id="sat-op" type="range" min="0.2" max="1" step="0.05" value="0.65" title="透明度" />
+        </div>
+        <div class="row"><b>地形夸张</b><input id="exag" type="range" min="1" max="3" step="0.1" value="1.3" /><span id="exag-v">1.3×</span></div>
+        <div class="row btns">
+          <button id="view-sunrise" class="btn sm">🌅 日出视角</button>
+          <button id="view-over" class="btn sm">🗺 俯视总览</button>
+        </div>
+        <p class="hint only-fine">旋转：右上角「⟲ 旋转」后直接拖动；或右键拖动、Ctrl + 拖动</p>
+        <p class="hint only-touch">双指捻转 = 旋转 · 双指捏合 = 缩放 · 双指上下推 = 俯仰 · 点右上「⟲ 旋转」后单指拖动绕观测点环绕</p>
+      </div>
+      <div class="legend card" id="legend"></div>
+      <div class="hourbar card">
+        <button id="play" class="btn sm" title="播放">▶</button>
+        <input id="hour" type="range" min="0" max="0" value="0" />
+        <div id="hour-label" class="hour-label">—</div>
+      </div>
+      <div id="status" class="status" hidden></div>
+      <div id="gesture-tip" class="gesture-tip" hidden>
+        <div class="gt-row"><i>☝️</i><span>单指拖动 平移</span></div>
+        <div class="gt-row"><i>🤏</i><span>双指捏合 缩放</span></div>
+        <div class="gt-row"><i>🔄</i><span>双指捻转 旋转</span></div>
+        <div class="gt-row"><i>↕️</i><span>双指上下推 俯仰</span></div>
+        <div class="gt-row"><i>⟲</i><span>右上「旋转」：单指绕观测点环绕</span></div>
+        <button class="btn sm primary" type="button">知道了</button>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div id="site" class="site card"></div>
+      <h3 class="sec">7 天日出时段预报 <small>点击查看详情</small></h3>
+      <div id="days" class="days"></div>
+      <div id="detail" class="detail card"></div>
+    </aside>
+
+    <section class="charts">
+      <div class="card chart-card wide cs" id="cs">
+        <div class="chart-head"><h3>云海详细预报</h3><small id="cs-meta">5 个全球模式逐小时诊断 · 点击任一格子/行跳到该时刻</small></div>
+        <div class="cs-grid">
+          <div class="cs-summary" id="cs-summary"></div>
+          <div class="cs-now" id="cs-now"></div>
+        </div>
+        <h4 class="cs-h">7 天 × 24 小时云海概率 <small>数字为集合平均 %，橙色下划线为日出所在小时，暗格为夜间</small></h4>
+        <div class="heatmap" id="cs-heat"></div>
+        <h4 class="cs-h">云层高度走势 <small>白色带 = 预测云层（云底–云顶），浅色带 = 各模式云顶范围；云顶低于黄线才能俯瞰云海</small></h4>
+        <div class="chart-box"><canvas id="chart-cloudlayer"></canvas></div>
+        <h4 class="cs-h">当日逐小时诊断 <small id="cs-day-lbl"></small></h4>
+        <div class="table-wrap" id="cs-hours"></div>
+        <h4 class="cs-h">周边观景点 · 此刻在云上还是云中 <small>同一模式格点的云顶高度对比各点海拔</small></h4>
+        <div class="table-wrap" id="cs-spots"></div>
+      </div>
+      <div class="card chart-card wide">
+        <div class="chart-head"><h3>逐小时云海概率 · 多模式集合</h3><small>点击图表跳转时刻；黄色柱为日出时刻，阴影为模式范围</small></div>
+        <div class="chart-box"><canvas id="chart-timeline"></canvas></div>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-head"><h3>垂直廓线（探空）</h3>
+          <select id="profile-model"></select></div>
+        <div class="chart-box tall"><canvas id="chart-profile"></canvas></div>
+        <p class="hint">红线为气温，蓝线为露点，两线贴近表示接近饱和（成云）；云顶之上气温随高度不降反升即为逆温封盖。</p>
+      </div>
+      <div class="card chart-card">
+        <div class="chart-head"><h3>日出光路剖面</h3><small id="horizon-meta"></small></div>
+        <div class="chart-box tall"><canvas id="chart-horizon"></canvas></div>
+        <p class="hint">橙色虚线为日出那一刻太阳光线到达观测点的路径（考虑地球曲率与大气折射）；路径穿过的云越多，日出越可能被遮挡。</p>
+      </div>
+      <div class="card chart-card wide">
+        <div class="chart-head"><h3>各模式日出时刻诊断</h3><small>同一天、同一地点，不同数值模式的独立诊断结果</small></div>
+        <div id="model-table" class="table-wrap"></div>
+      </div>
+    </section>
+  </main>
+
+  <main id="tab-obs" class="tab obs" hidden>
+    <section class="card">
+      <h3>记录一次现场观测</h3>
+      <p class="hint">观测记录保存在本浏览器中，会自动关联你此前看到的预测（距日出约 24 小时的那一版），用于检验和校准模型。</p>
+      <form id="obs-form" class="obs-form">
+        <label>地点<input name="name" required /></label>
+        <label>日期<input name="date" type="date" required /></label>
+        <label>云海
+          <select name="sea"><option value="2">有，成片云海</option><option value="1">零散 / 局部</option><option value="0">无</option><option value="-1">身处云雾中</option></select>
+        </label>
+        <label>日出
+          <select name="sun"><option value="2">完整可见</option><option value="1">部分可见 / 云缝</option><option value="0">未见</option></select>
+        </label>
+        <label>朝霞（0–5）<input name="glow" type="number" min="0" max="5" value="0" /></label>
+        <label>估计云顶海拔(m)<input name="ztop" type="number" step="10" placeholder="可选" /></label>
+        <label class="full">备注<input name="note" placeholder="风、温度、能见度、照片链接……" /></label>
+        <div class="full btns"><button class="btn primary" type="submit">保存观测</button>
+          <button class="btn" type="button" id="obs-export">导出 JSON</button>
+          <label class="btn file">导入 JSON<input type="file" id="obs-import" accept="application/json" hidden /></label></div>
+      </form>
+    </section>
+    <section class="card">
+      <h3>预测检验</h3>
+      <div id="verify"></div>
+    </section>
+    <section class="card">
+      <h3>观测记录</h3>
+      <div id="obs-list" class="table-wrap"></div>
+    </section>
+  </main>
+
+  <footer>
+    数据：<a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>（ECMWF / NCEP / DWD / CMA / JMA 模式、Copernicus DEM、CAMS 气溶胶）·
+    <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" target="_blank" rel="noopener">NASA GIBS</a> 卫星 ·
+    Mapterhorn 地形 · OpenStreetMap 地点 · Esri / OpenTopoMap 底图。
+    预测为基于物理诊断的概率参考，不替代官方气象预警与现场判断；山区徒步请量力而行。
+  </footer>
+  <nav class="mnav" aria-label="主导航">
+    <button data-tab="forecast" class="active"><i>⛰</i>预测</button>
+    <button data-go="cs"><i>☁</i>云海</button>
+    <button data-tab="obs"><i>✎</i>观测</button>
+    <button data-act="docs"><i>📖</i>方法</button>
+    <button data-act="share"><i>↗</i>分享</button>
+  </nav>
+  <div id="docs-sheet" class="docs-sheet" hidden>
+    <div class="ds-bar"><b>方法文档</b><button class="btn sm" type="button" data-close>关闭</button></div>
+    <iframe title="方法文档"></iframe>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
