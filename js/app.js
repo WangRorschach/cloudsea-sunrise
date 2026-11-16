@@ -188,7 +188,7 @@ function rayFor(d) {
   const xs = [...new Set(per.flat().map((p) => p.x))].sort((a, b) => a - b);
   return xs.map((x) => {
     const ts = per.map((arr) => arr.find((p) => p.x === x)?.t).filter((t) => t != null);
-    return { x, t: ts.reduce((a, b) => a + b, 0) / ts.length };
+    return { x, t: ts.length ? ts.reduce((a, b) => a + b, 0) / ts.length : null };
   });
 }
 
@@ -203,10 +203,10 @@ function drawHorizonFor(d) {
 // ---------- 详情 ----------
 function level(p) {
   if (p == null) return { cls: 'lo', txt: '无数据' };
-  if (p >= 60) return { cls: 'hi', txt: '很可能' };
-  if (p >= 35) return { cls: 'mid', txt: '有机会' };
-  if (p >= 15) return { cls: 'lo', txt: '可能性低' };
-  return { cls: 'lo', txt: '基本无' };
+  if (p >= 60) return { cls: 'hi', txt: '较有利' };
+  if (p >= 35) return { cls: 'mid', txt: '一般' };
+  if (p >= 15) return { cls: 'lo', txt: '偏不利' };
+  return { cls: 'lo', txt: '不利' };
 }
 function confidence(st) {
   if (st.n < 2 || st.sd == null) return '单模式 · 未验证';
@@ -338,8 +338,8 @@ function renderModelTable(d) {
   }).join('');
   $('#model-table').innerHTML = `<table>
     <thead><tr><th>模式</th><th>云海指数</th><th>云顶</th><th>类型</th><th>封盖 K/km</th><th>山顶 RH</th><th>日出遮云指数</th><th>朝霞</th><th>中高云</th><th>气温</th><th>风 m/s</th></tr></thead>
-    <tbody>${rows}<tr class="mean"><td>集合平均</td><td>${r0(d.sea.mean, '%')}</td><td>${r0(d.ztop.mean, ' m')}</td><td>${TYPE[d.type]}</td><td>${r1(d.cap.mean)}</td><td>—</td>
-      <td>${r0(d.vis.mean, '%')}</td><td>${r0(d.glow.mean)}</td><td>—</td><td>${r1(d.hike.T.mean, '°')}</td><td>${r1(d.hike.ws.mean)}</td></tr></tbody></table>`;
+    <tbody>${rows}<tr class="mean"><td>集合平均</td><td>${r0(d.sea.mean, '/100')}</td><td>${r0(d.ztop.mean, ' m')}</td><td>${TYPE[d.type]}</td><td>${r1(d.cap.mean)}</td><td>—</td>
+      <td>${r0(d.vis.mean, '/100')}</td><td>${r0(d.glow.mean)}</td><td>—</td><td>${r1(d.hike.T.mean, '°')}</td><td>${r1(d.hike.ws.mean)}</td></tr></tbody></table>`;
 }
 
 function renderModelSelect() {
@@ -365,12 +365,13 @@ function setHour(i, { fromDay = false } = {}) {
   const L = dayLabel(h.local.slice(0, 10));
   const P = h.P.mean;
   const zt = h.ztop.mean;
-  $('#hour-label').innerHTML = `<b>${L.md} ${h.local.slice(11, 16)}</b> · 太阳 ${h.sunEl.toFixed(0)}° · 云海 <b>${r0(P, '%')}</b>${zt != null ? ` · 云顶 ${r0(zt, ' m')}` : ''}`;
+  $('#hour-label').innerHTML = `<b>${L.md} ${h.local.slice(11, 16)}</b> · 太阳 ${h.sunEl.toFixed(0)}° · 云海指数 <b>${r0(P, '/100')}</b>${zt != null ? ` · 诊断云顶 ${r0(zt, ' m')}` : ' · 云顶无法判断'}`;
   // Cloud existence is independent of the viewpoint's suitability score.
   const show = zt != null;
   const tint = h.sunEl < -6 ? 'night' : h.sunEl < 10 ? 'dawn' : 'day';
   const a = agg(i);
-  const cover = Math.min(1, 0.25 + (a.cl.mean ?? 0) / 120);
+  renderLiveDiagnostic(h, a);
+  const cover = a.cl.mean == null ? 0.25 : Math.min(1, 0.25 + a.cl.mean / 120);
   M.setCloudTop(show ? zt : null, tint, { P: P ?? 0, cover, center: S.site, sunAz: S.res.days[S.day]?.rise.azimuth });
   renderLegend(h, show);
   drawProfile(h, S.site, S.model);
@@ -387,6 +388,29 @@ function setHour(i, { fromDay = false } = {}) {
 }
 
 function onTimelinePick(i) { stopPlay(); setHour(i); }
+
+// Map-first current-hour diagnosis: weather inputs are not observations of a continuous cloud field.
+function renderLiveDiagnostic(h, a) {
+  const el = $('#live-diagnostic');
+  if (!el) return;
+  const nTotal = S.res.models.length;
+  const nScore = h.P.n;
+  const nTop = h.ztop.n;
+  const top = h.ztop.mean;
+  const delta = top == null ? null : S.site.zObs - top;
+  const sky = top == null ? '云顶缺测'
+    : delta < 0 ? '观测点可能处于云中'
+      : delta < 150 ? '云顶贴近观测点'
+        : '可俯瞰诊断云层';
+  const quality = nScore === 0 ? '关键气象资料不足' : nScore < nTotal ? '部分模式资料不足' : '关键评分资料齐全';
+  const cloudText = nTop === 0 ? '无法判断' : `${r0(top)} m <small>(${nTop}/${nTotal} 模式)</small>`;
+  el.innerHTML = `<div class="ld-head"><b>逐小时诊断</b><span>${h.local.slice(5, 16).replace('T', ' ')}</span></div>
+    <div class="ld-main"><div><small>云海条件指数（非概率）</small><strong>${r0(h.P.mean)}<em>/100</em></strong></div>
+    <div><small>云顶估计</small><strong class="ld-top">${cloudText}</strong></div></div>
+    <div class="ld-status">${sky}</div>
+    <div class="ld-meta"><span>${quality}</span><span>有效评分 ${nScore}/${nTotal}</span></div>
+    <p>3D 云面为示意，不表示实际云区覆盖面积。请结合现场观测与官方气象预警。</p>`;
+}
 
 // ---------- 云海详细预报 ----------
 function renderCsDay(d) {
@@ -407,8 +431,8 @@ function renderCsNow() {
   const i = S.hour;
   const a = agg(i);
   const s = S.site;
-  const p = a.P.mean ?? 0;
-  const has = p >= 8 && a.ztop.mean != null;
+  const p = a.P.mean;
+  const has = a.ztop.mean != null;
   const rel = has ? s.zObs - a.ztop.mean : null;
   const cov = has ? CS.coverage(S.grid, a.ztop.mean) : null;
   const L = dayLabel(a.local.slice(0, 10));
@@ -416,7 +440,7 @@ function renderCsNow() {
   const thick = has && a.zbase.mean != null ? a.ztop.mean - a.zbase.mean : null;
   $('#cs-now').innerHTML = `<h5>${L.md} ${a.local.slice(11, 16)} · 太阳高度 ${r0(a.sunEl, '°')}</h5>
     <div class="big">
-      <span><b>${r0(p)}</b><small>% 云海条件指数 · ${lv.txt}</small></span>
+      <span><b>${r0(p)}</b><small>/100 云海条件指数 · ${lv.txt}</small></span>
       <span><b>${has ? r0(a.ztop.mean) : '—'}</b><small>m 云顶${has ? ` · ${r0(a.ztop.min)}–${r0(a.ztop.max)}` : ''}</small></span>
       <span><b>${cov == null ? '—' : r0(cov * 100)}</b><small>% 周边 10 km 被云覆盖${S.grid ? '' : '（计算中）'}</small></span>
     </div>
@@ -431,7 +455,7 @@ function renderCsNow() {
       <div><span>主要限制</span>${p >= 60 ? '<span class="ok">条件理想</span>' : a.limit ? a.limit.txt : '—'}</div>
     </div>
     <p class="subh" style="margin-top:10px">各模式</p>
-    <div class="cs-models">${Object.entries(a.perModel).map(([id, v]) => `<span><i class="dot" style="background:${modelColor(id)}"></i>${modelName(id)} <b>${r0(v, '%')}</b></span>`).join('')}</div>`;
+    <div class="cs-models">${Object.entries(a.perModel).map(([id, v]) => `<span><i class="dot" style="background:${modelColor(id)}"></i>${modelName(id)} <b>${r0(v, '/100')}</b></span>`).join('')}</div>`;
 }
 
 function renderCsSpots() {
@@ -453,7 +477,7 @@ function bindCs() {
 function renderLegend(h, show) {
   const zt = h.ztop;
   $('#legend').innerHTML = show
-    ? `<b>预测云海面（3D）</b><br><span class="sw" style="background:#f4f6fb"></span>云顶 ${r0(zt.mean)} m，观测点周边 24 km；高于云顶的山峰露出<br>模式范围 ${r0(zt.min)}–${r0(zt.max)} m（${zt.n} 个模式）<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`
+    ? `<b>云顶高度示意（非实测云海）</b><br><span class="sw" style="background:#f4f6fb"></span>有效模式云顶 ${r0(zt.mean)} m；仅为统一高度的可视化示意，云的水平范围无法由本站廓线确定<br>模式范围 ${r0(zt.min)}–${r0(zt.max)} m（${zt.n} 个模式）<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`
     : `<b>此刻云层高度资料不足</b><br>不能据此认定天空无云<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`;
 }
 
