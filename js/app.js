@@ -627,7 +627,7 @@ function renderObs() {
   $('#obs-list').innerHTML = list.length ? `<table>
     <thead><tr><th>日期</th><th>地点</th><th>云海</th><th>日出</th><th>朝霞</th><th>云顶</th><th>当时预测 云海 / 日出</th><th>备注</th><th></th></tr></thead>
     <tbody>${list.map((o) => `<tr><td>${esc(o.date)}</td><td>${esc(o.name)}</td><td>${SEA_TXT[o.sea]}</td><td>${SUN_TXT[o.sun]}</td><td>${r0(o.glow)}</td><td>${r0(o.ztop, ' m')}</td>
-      <td>${o.forecast ? `${r0(o.forecast.sea, '%')} / ${r0(o.forecast.vis, '%')} <small style="color:var(--text-3)">提前 ${r0(o.forecast.lead)} h</small>` : '<small style="color:var(--text-3)">无快照</small>'}</td>
+      <td>${o.forecast ? `${r0(o.forecast.sea, '/100')} / ${r0(o.forecast.vis, '/100')} <small style="color:var(--text-3)">提前 ${r0(o.forecast.lead)} h</small>` : '<small style="color:var(--text-3)">无快照</small>'}</td>
       <td style="white-space:normal;text-align:left;max-width:240px">${esc(o.note)}</td><td><button class="btn sm" data-del="${esc(o.id)}">删除</button></td></tr>`).join('')}</tbody></table>`
     : '<p class="empty">还没有观测记录。登顶后记下实际看到的云海与日出，就能检验这里的预测准不准。</p>';
   $('#obs-list').querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
@@ -638,14 +638,14 @@ function renderObs() {
     if (!v) return `<div><h4>${title}</h4><p class="empty">需要至少 1 条带预测快照的观测。先在“预测”页查看某地，再于当天记录观测。</p></div>`;
     const p = (x) => (x == null ? '—' : x.toFixed(2));
     return `<div><h4>${title} <small>n = ${v.n}</small></h4><div class="grid2">
-      <div><span>Brier 评分</span>${p(v.bs)}</div><div><span>技巧评分 BSS</span>${p(v.bss)}</div>
+      <div><span>Brier 评分</span>${v.uncalibrated ? '待概率校准' : p(v.bs)}</div><div><span>技巧评分 BSS</span>${v.uncalibrated ? '待概率校准' : p(v.bss)}</div>
       <div><span>命中率 POD</span>${p(v.pod)}</div><div><span>空报率 FAR</span>${p(v.far)}</div>
       <div><span>CSI</span>${p(v.csi)}</div><div><span>实况发生频率</span>${p(v.base)}</div></div>
-      <p class="hint">Brier 越小越好（0 为完美）；BSS &gt; 0 表示优于“总按历史频率猜”。以 50% 为阈值计算 POD/FAR。</p></div>`;
+      <p class="hint">当前为未经校准的条件指数，不能计算概率型 Brier/BSS。POD/FAR/CSI 仅按指数 50/100 的阈值粗略检验；低样本量结果不可泛化。</p></div>`;
   };
   $('#verify').innerHTML = `<div class="stats">
-    ${card('云海概率', O.verify(list, 'sea', (o) => (o.sea >= 1 ? 1 : 0)))}
-    ${card('日出可见度', O.verify(list, 'vis', (o) => (o.sun >= 1 ? 1 : 0)))}</div>`;
+    ${card('云海条件指数', O.verify(list, 'sea', (o) => (o.sea >= 1 ? 1 : 0)))}
+    ${card('日出遮云指数', O.verify(list, 'vis', (o) => (o.sun >= 1 ? 1 : 0)))}</div>`;
 }
 
 function bindObs() {
