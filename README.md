@@ -15,20 +15,21 @@ python3 -m http.server 8765
 
 测试（Node 18+）：`node test/run.mjs`
 
-## 手机与分享（单文件）
+## 唯一正式网页
 
-```bash
-node tools/build-single.mjs   # 生成 dist/cloudsea-sunrise.html（约 1.7 MB）
-```
+只维护一个线上入口：https://wangrorschach.github.io/cloudsea-sunrise/
 
-这个文件已经内嵌全部脚本、样式、地点包和方法文档，可以直接通过微信、AirDrop 或网盘发送，用手机浏览器（Safari / Chrome）打开即可使用。地图瓦片和气象数据仍然需要联网获取。微信内置预览可能不运行脚本，请选择「用浏览器打开」。如需分享网址，可将该文件托管到任意静态空间，例如 GitHub Pages。
+网站由根目录 `index.html` 及 `css/`、`js/`、`data/` 组成，部署于 GitHub Pages。无需另行打开或下载其他 HTML 版本。
 
-手机手势：
+手机通过浏览器直接访问同一个网址。网页内部的“方法文档”以覆盖层显示，不属于另一个预测网站。
+
+## 手机操作
+
 - 单指拖动：平移
 - 双指捏合：缩放
 - 双指扭转：旋转
 - 双指同时上下推：调整俯仰
-- 点「⟲ 旋转」后，单指左右拖动旋转、上下拖动调整俯仰，松手后带惯性
+- 点「⟲ 旋转」后，单指左右拖动旋转、上下拖动调整俯仰
 
 ## 功能
 - MapLibre 3D 地形（Mapterhorn / Copernicus GLO-30，中国区约 20 m/像素）、等高线、海拔分层设色、卫星/地形底图
