@@ -167,10 +167,11 @@ export function analyzeCloudSea(prof, c) {
       if (l.dth >= 6) top = l.z1;
       else break;
     }
-    // This remains a heuristic valley-fog cap, not an observed cloud top.
-    fogTop = clamp(top, c.zValley + 100, c.zValley + 500);
+    // An upper pressure level is not a valley-surface observation. Resolve a
+    // fog top only when the lowest valid level is genuinely near valley floor.
+    fogTop = low.z <= c.zValley + 200 && top > low.z ? top : null;
     r.topEstimated = true;
-    r.ztopRange = [c.zValley + 100, c.zValley + 500];
+    r.ztopRange = fogTop == null ? [c.zValley, null] : [low.z, fogTop];
   }
 
   let Fcloud;
