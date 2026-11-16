@@ -170,8 +170,6 @@ export function analyzeCloudSea(prof, c) {
     // An upper pressure level is not a valley-surface observation. Resolve a
     // fog top only when the lowest valid level is genuinely near valley floor.
     fogTop = low.z <= c.zValley + 200 && top > low.z ? top : null;
-    r.topEstimated = true;
-    r.ztopRange = fogTop == null ? [c.zValley, null] : [low.z, fogTop];
   }
 
   let Fcloud;
@@ -179,6 +177,8 @@ export function analyzeCloudSea(prof, c) {
     Fcloud = satF; r.ztop = satTop; r.zbase = satBase; r.type = 'A';
   } else if (fogTop != null && fogP != null && fogP > 0.08) {
     Fcloud = fogP; r.ztop = fogTop; r.zbase = c.zValley; r.type = 'B';
+    r.topEstimated = true;
+    r.ztopRange = [low.z, fogTop];
   } else {
     Fcloud = Math.max(satF, fogP ?? 0); r.ztop = satTop ?? fogTop; r.zbase = satBase;
   }
