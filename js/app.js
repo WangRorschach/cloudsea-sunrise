@@ -442,7 +442,7 @@ function renderCsNow() {
     <div class="big">
       <span><b>${r0(p)}</b><small>/100 云海条件指数 · ${lv.txt}</small></span>
       <span><b>${has ? r0(a.ztop.mean) : '—'}</b><small>m 云顶${has ? ` · ${r0(a.ztop.min)}–${r0(a.ztop.max)}` : ''}</small></span>
-      <span><b>${cov == null ? '—' : r0(cov * 100)}</b><small>% 周边 10 km 被云覆盖${S.grid ? '' : '（计算中）'}</small></span>
+      <span><b>${cov == null ? '—' : r0(cov * 100)}</b><small>% 地形低于云顶（不代表实际云覆盖）${S.grid ? '' : '（计算中）'}</small></span>
     </div>
     <div class="grid2">
       <div><span>类型</span>${has ? CS.TYPE_TXT[a.type] : '—'}</div>
@@ -452,7 +452,7 @@ function renderCsNow() {
       <div><span>山顶相对湿度</span>${r0(a.rh.mean, '%')}</div>
       <div><span>逆温强度</span>${r1(a.cap.mean, ' K/km')}</div>
       <div><span>山顶风速</span>${r1(a.ws.mean, ' m/s')}</div>
-      <div><span>主要限制</span>${p >= 60 ? '<span class="ok">条件理想</span>' : a.limit ? a.limit.txt : '—'}</div>
+      <div><span>主要限制</span>${p != null && p >= 60 ? '<span class="ok">条件较有利</span>' : a.limit ? a.limit.txt : '—'}</div>
     </div>
     <p class="subh" style="margin-top:10px">各模式</p>
     <div class="cs-models">${Object.entries(a.perModel).map(([id, v]) => `<span><i class="dot" style="background:${modelColor(id)}"></i>${modelName(id)} <b>${r0(v, '/100')}</b></span>`).join('')}</div>`;
@@ -477,7 +477,7 @@ function bindCs() {
 function renderLegend(h, show) {
   const zt = h.ztop;
   $('#legend').innerHTML = show
-    ? `<b>云顶高度示意（非实测云海）</b><br><span class="sw" style="background:#f4f6fb"></span>有效模式云顶 ${r0(zt.mean)} m；仅为统一高度的可视化示意，云的水平范围无法由本站廓线确定<br>模式范围 ${r0(zt.min)}–${r0(zt.max)} m（${zt.n} 个模式）<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`
+    ? `<b>云顶高度示意（非实测云海）</b><br><span class="sw" style="background:#f4f6fb"></span>有效模式云顶 ${r0(zt.mean)} m；仅为统一高度的可视化示意，云的水平范围无法由本站廓线确定<br>模式范围 ${r0(zt.min)}–${r0(zt.max)} m（${zt.n} 个模式）<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（透光率为启发式估计，非实测）`
     : `<b>此刻云层高度资料不足</b><br>不能据此认定天空无云<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`;
 }
 
