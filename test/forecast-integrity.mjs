@@ -56,4 +56,13 @@ assert.equal(analyzeSunrise({ ...sunrise, precip: null }).Pvis, null);
 assert.equal(analyzeSunrise({ ...sunrise, samples: [] }).glow, null);
 assert.equal(stats([null, undefined]).mean, null);
 assert.equal(stats([NaN, Infinity, 30]).mean, 30);
+
+// Additional independent audit cases: explicit diagnoses distinguish 0 from unknown.
+assert.match(unfavorable.diagnosisDetails, /未检出|阈值/);
+assert.equal(missingPrecip.diagnosis, 'missing-input');
+assert.match(missingPrecip.diagnosisDetails, /precip/);
+assert.equal(top.diagnosis, 'unresolved-cloud-top');
+assert.match(top.diagnosisDetails, /上界/);
+assert.equal(good.diagnosis, 'resolved-cloud');
+assert.equal(analyzeCloudSea([], ctx).diagnosis, 'insufficient-profile');
 console.log('Forecast integrity regression tests passed');
