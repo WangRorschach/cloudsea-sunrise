@@ -49,7 +49,7 @@ export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
       interaction: { mode: 'nearest', axis: 'x', intersect: false },
       scales: {
         x: { type: 'linear', min: H[0]?.t, max: H[H.length - 1]?.t, ticks: { stepSize: 6 * 3600e3, callback: (v) => fmtTime(v, offset), maxRotation: 0, autoSkip: true } },
-        y: { min: 0, max: 100, title: { display: true, text: '云海条件指数 %' } },
+        y: { min: 0, max: 100, title: { display: true, text: '云海条件指数 /100' } },
       },
       plugins: {
         legend: { labels: { boxWidth: 10, filter: (it) => !it.text.startsWith('模式范围') } },
@@ -176,11 +176,11 @@ export function drawCloudLayer(res, site, offset, { selected, onSelect, nowMs, a
       scales: {
         x: { type: 'linear', min: H[0]?.h.t, max: H[H.length - 1]?.h.t, ticks: { stepSize: 6 * 3600e3, callback: (v) => fmtTime(v, offset), maxRotation: 0, autoSkip: true } },
         y: { min: Math.max(0, Math.floor((site.zValley - 250) / 100) * 100), max: Math.ceil(ymax / 100) * 100, title: { display: true, text: '海拔 m' } },
-        yP: { position: 'right', min: 0, max: 100, grid: { display: false }, title: { display: true, text: '云海条件指数 %' } },
+        yP: { position: 'right', min: 0, max: 100, grid: { display: false }, title: { display: true, text: '云海条件指数 /100' } },
       },
       plugins: {
         legend: { labels: { boxWidth: 10, filter: (it) => !it.text.startsWith('云顶范围') } },
-        tooltip: { callbacks: { title: (it) => fmtTime(it[0].parsed.x, offset), label: (c) => (c.parsed.y == null ? null : `${c.dataset.label}: ${Math.round(c.parsed.y)}${c.dataset.yAxisID === 'yP' ? '%' : ' m'}`) } },
+        tooltip: { callbacks: { title: (it) => fmtTime(it[0].parsed.x, offset), label: (c) => (c.parsed.y == null ? null : `${c.dataset.label}: ${Math.round(c.parsed.y)}${c.dataset.yAxisID === 'yP' ? '/100' : ' m'}`) } },
       },
       onClick: (e, els, chart) => {
         const x = chart.scales.x.getValueForPixel(e.x);
