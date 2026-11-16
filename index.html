@@ -11,7 +11,7 @@
   <meta name="description" content="基于多模式数值预报气压层廓线、3D 地形与日出光路几何的云海与日出条件评估；指数未经概率校准。" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='38' r='14' fill='%23ffb347'/%3E%3Cpath d='M4 44c8-6 16-6 24 0s16 6 32 0v16H4z' fill='%23eef3fb'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.17.0/dist/maplibre-gl.css" />
-  <link rel="stylesheet" href="css/style.css?v=20261116-r2" />
+  <link rel="stylesheet" href="css/style.css?v=20261116-r3" />
   <script src="https://unpkg.com/maplibre-gl@5.17.0/dist/maplibre-gl.js"></script>
   <script src="https://unpkg.com/maplibre-contour@0.1.1/dist/index.min.js"></script>
   <script src="https://unpkg.com/chart.js@4.4.6/dist/chart.umd.js"></script>
@@ -48,7 +48,7 @@
           <label><input type="radio" name="base" value="topo" /> 地形图</label>
         </div>
         <div class="row"><b>图层</b>
-          <label><input type="checkbox" id="lyr-cloud" checked /> 预测云海面</label>
+          <label><input type="checkbox" id="lyr-cloud" checked /> 云顶示意面</label>
           <label><input type="checkbox" id="lyr-contours" checked /> 等高线</label>
           <label><input type="checkbox" id="lyr-hypso" /> 海拔分层设色</label>
           <label><input type="checkbox" id="lyr-ray" checked /> 日出光路</label>
@@ -60,12 +60,13 @@
         </div>
         <div class="row"><b>地形夸张</b><input id="exag" type="range" min="1" max="3" step="0.1" value="1.3" /><span id="exag-v">1.3×</span></div>
         <div class="row btns">
-          <button id="view-sunrise" class="btn sm">🌅 日出视角</button>
+          <button id="view-sunrise" class="btn sm" title="模拟日出方向的地形相机，不是山顶真实人眼视角">🌅 日出方向（示意）</button>
           <button id="view-over" class="btn sm">🗺 俯视总览</button>
         </div>
         <p class="hint only-fine">旋转：右上角「⟲ 旋转」后直接拖动；或右键拖动、Ctrl + 拖动</p>
         <p class="hint only-touch">双指捻转 = 旋转 · 双指捏合 = 缩放 · 双指上下推 = 俯仰 · 点右上「⟲ 旋转」后单指拖动绕观测点环绕</p>
       </div>
+      <div class="live-diagnostic card" id="live-diagnostic" aria-live="polite"><div class="ld-head">当前时刻诊断 <span>加载中</span></div><p>正在读取天气模式和云顶高度…</p></div>
       <div class="legend card" id="legend"></div>
       <div class="hourbar card">
         <button id="play" class="btn sm" title="播放">▶</button>
@@ -85,14 +86,14 @@
 
     <aside class="panel">
       <div id="site" class="site card"></div>
-      <h3 class="sec">7 天日出时段预报 <small>点击查看详情</small></h3>
+      <h3 class="sec">7 天日出时段预报 <small>条件指数未经实况校准 · 点击查看</small></h3>
       <div id="days" class="days"></div>
       <div id="detail" class="detail card"></div>
     </aside>
 
     <section class="charts">
       <div class="card chart-card wide cs" id="cs">
-        <div class="chart-head"><h3>云海详细预报</h3><small id="cs-meta">5 个全球模式逐小时诊断 · 点击任一格子/行跳到该时刻</small></div>
+        <div class="chart-head"><h3>云海详细预报</h3><small id="cs-meta">多模式逐小时诊断（未校准） · 点击格子或行联动地图</small></div>
         <div class="cs-grid">
           <div class="cs-summary" id="cs-summary"></div>
           <div class="cs-now" id="cs-now"></div>
@@ -114,7 +115,7 @@
         <div class="chart-head"><h3>垂直廓线（探空）</h3>
           <select id="profile-model"></select></div>
         <div class="chart-box tall"><canvas id="chart-profile"></canvas></div>
-        <p class="hint">红线为气温，蓝线为露点，两线贴近表示接近饱和（成云）；云顶之上气温随高度不降反升即为逆温封盖。</p>
+        <p class="hint">红线为气温，蓝线为露点。两线接近只是接近饱和的迹象，不能单独确认云层；云顶是稀疏气压层诊断结果，不代表实测值。</p>
       </div>
       <div class="card chart-card">
         <div class="chart-head"><h3>日出光路剖面</h3><small id="horizon-meta"></small></div>
@@ -160,7 +161,7 @@
   </main>
 
   <footer>
-    <strong title="预测完整性修订版，分数为未经校准的条件指数">预测模型 v2026.11.16-R2 · 条件指数 ≠ 实际概率</strong> ·
+    <strong title="预测完整性修订版，分数为未经校准的条件指数">预测模型 v2026.11.16-R3 · 条件指数 ≠ 实际概率</strong> ·
     数据：<a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>（ECMWF / NCEP / DWD / CMA / JMA 模式、Copernicus DEM、CAMS 气溶胶）·
     <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" target="_blank" rel="noopener">NASA GIBS</a> 卫星 ·
     Mapterhorn 地形 · OpenStreetMap 地点 · Esri / OpenTopoMap 底图。
@@ -178,6 +179,6 @@
     <iframe title="方法文档"></iframe>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <script type="module" src="js/app.js?v=20261116-r2"></script>
+  <script type="module" src="js/app.js?v=20261116-r3"></script>
 </body>
 </html>
