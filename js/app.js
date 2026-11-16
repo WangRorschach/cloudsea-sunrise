@@ -17,6 +17,16 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const r0 = (x, s = '') => (x == null || Number.isNaN(x) ? '—' : `${Math.round(x)}${s}`);
 const r1 = (x, s = '') => (x == null || Number.isNaN(x) ? '—' : `${x.toFixed(1)}${s}`);
 const modelName = (id) => MODELS.find((m) => m.id === id)?.name ?? id;
+const scoreText = (p) => p == null ? '—' : p > 0 && p < 0.5 ? '<1' : String(Math.round(p));
+const diagnosticLabel = (r) => r?.diagnosisDetails ?? '无有效气压层或该模式暂未提供此时段资料';
+const dailyDataNote = (d) => {
+  const ms = Object.values(d.models ?? {});
+  const unresolved = ms.filter((m) => m.seaAtRise?.diagnosis === 'unresolved-cloud-top').length;
+  const missing = ms.filter((m) => ['missing-input', 'insufficient-profile'].includes(m.seaAtRise?.diagnosis)).length;
+  const known = d.sea.n;
+  return known ? `有效评分 ${known}/${ms.length} 模式${unresolved || missing ? ` · 云顶未解 ${unresolved} · 输入不足 ${missing}` : ''}`
+    : `无法计算：云顶未解 ${unresolved} · 资料不足 ${missing}`;
+};
 const WEEK = '日一二三四五六';
 
 const S = {
@@ -160,11 +170,11 @@ function renderDays() {
     const mx = d.sea.max ?? 0;
     return `<button class="day${d.past ? ' past' : ''}" data-k="${k}" aria-pressed="${k === S.day}">
       <div class="d">${rd ?? L.w}<small>${L.md}</small></div>
-      <div class="sea">
-        <div class="lbl"><span>云海 · 日出 ${hm(d.rise.time)}</span><b>${r0(d.sea.mean, '/100')}</b></div>
+      <div class="sea" title="${esc(dailyDataNote(d))}">
+        <div class="lbl"><span>云海 · 日出 ${hm(d.rise.time)}</span><b>${scoreText(d.sea.mean)}${d.sea.mean == null ? '' : '/100'}</b></div>
         <div class="meter" title="条件指数模式范围 ${r0(mn)}–${r0(mx)} /100"><span class="rng" style="left:${mn}%;width:${mx - mn}%"></span><span class="val" style="width:${d.sea.mean ?? 0}%"></span></div>
       </div>
-      <div class="m">日出<b class="sun">${r0(d.vis.mean, '/100')}</b></div>
+      <div class="m">日出<b class="sun">${scoreText(d.vis.mean)}${d.vis.mean == null ? '' : '/100'}</b></div>
       <div class="m">朝霞<b>${r0(d.glow.mean)}</b></div>
     </button>`;
   }).join('');
@@ -287,10 +297,15 @@ function renderDetail(d) {
       <span class="tag ${lv.cls}">云海条件${lv.txt}</span><span class="tag ${lvSun.cls === 'hi' ? 'hi' : lvSun.cls}">日出条件${lvSun.txt}</span><span class="tag conf">${confidence(d.sea)}</span>
     </div>
     <div class="trio">
-      <div><small>云海条件指数</small><b>${r0(d.sea.mean)}</b><span>/100 · ${r0(d.sea.min)}–${r0(d.sea.max)}</span></div>
+      <div><small>云海条件指数</small><b>${scoreText(d.sea.mean)}</b><span>${d.sea.mean == null ? '无法计算' : `/100 · ${r0(d.sea.min)}–${r0(d.sea.max)}`}</span></div>
       <div><small>日出遮云指数</small><b class="sun">${r0(d.vis.mean)}</b><span>/100 · ${r0(d.vis.min)}–${r0(d.vis.max)}</span></div>
       <div><small>朝霞指数</small><b>${r0(d.glow.mean)}</b><span>/ 100</span></div>
     </div>
+    <p class="data-diagnostics">${esc(dailyDataNote(d))}。0 表示规则评分不利，— 表示无法计算；两者都不是实测发生概率。</p>
+    <details class="score-explain"><summary>查看评分公式与每个天气模式的计算依据</summary>
+      <p>云海条件指数 S = 100 × 成云因子 × 高度因子 × Q；Q = 封盖因子<sup>0.35</sup> × 上空通透因子<sup>0.30</sup> × 风速因子<sup>0.15</sup> × 无降水因子<sup>0.20</sup>。这些权重未经实况校准，不是概率。</p>
+      <div class="score-mode-list">${Object.entries(d.models).map(([id, m]) => { const v = m.seaAtRise; return `<div><b>${esc(modelName(id))}</b><span>日出时刻指数 ${scoreText(v?.P)}${v?.P == null ? '' : '/100'}</span><small>${esc(diagnosticLabel(v))}</small></div>`; }).join('')}</div>
+    </details>
     <ul class="why">${reasons(d).map((x) => `<li>${x}</li>`).join('')}</ul>
     <div>
       <p class="subh">云海因子（集合平均，1 为最有利）</p>
@@ -410,11 +425,11 @@ function renderLiveDiagnostic(h, a) {
       : '有效模式已完成评分';
   const cloudText = nTop === 0 ? (h.P.mean === 0 ? '未检出' : '无法判断') : `${r0(top)} m <small>(${nTop}/${nTotal} 模式)</small>`;
   el.innerHTML = `<div class="ld-head"><b>逐小时诊断</b><span>${h.local.slice(5, 16).replace('T', ' ')}</span></div>
-    <div class="ld-main"><div><small>云海条件指数（非概率）</small><strong>${r0(h.P.mean)}<em>/100</em></strong></div>
+    <div class="ld-main"><div><small>云海条件指数（非概率）</small><strong>${scoreText(h.P.mean)}<em>${h.P.mean == null ? '未计算' : '/100'}</em></strong></div>
     <div><small>云顶估计</small><strong class="ld-top">${cloudText}</strong></div></div>
     <div class="ld-status">${sky}</div>
     <div class="ld-meta"><span>${quality}</span><span>有效评分 ${nScore}/${nTotal}</span></div>
-    <p>3D 云面为示意，不表示实际云区覆盖面积。请结合现场观测与官方气象预警。</p>`;
+    <p>${h.P.mean === 0 ? '0 是计算条件指数，不代表出现云海的真实概率为 0%。' : h.P.mean == null ? '缺少可计算的云顶或输入数据；不以零代替。' : '3D 云面为示意，不是实际云区覆盖范围。'} 请结合现场观测与官方气象预警。</p>`;
 }
 
 // ---------- 云海详细预报 ----------
