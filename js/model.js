@@ -110,7 +110,7 @@ export function layersOf(prof) {
  */
 export function analyzeCloudSea(prof, c) {
   const r = {
-    P: null, ztop: null, zbase: null, type: 'none', margin: null,
+    P: null, ztop: null, zbase: null, ztopRange: null, topEstimated: false, type: 'none', margin: null,
     cap: null, invDT: null, jump: null, rhObs: null, wsObs: null, f: {}, notes: [],
   };
   if (prof.length < 2) return r;
@@ -137,40 +137,50 @@ export function analyzeCloudSea(prof, c) {
     satBase = kb === 0 ? Math.min(prof[0].z, c.zValley) : (prof[kb - 1].z + prof[kb].z) / 2;
     const a = prof[kt];
     const b = prof[kt + 1];
-    if (b) {
-      satTop = a.RH > 90 && b.RH < 90 ? a.z + ((b.z - a.z) * (a.RH - 90)) / (a.RH - b.RH) : a.z + 0.35 * (b.z - a.z);
-    } else satTop = a.z;
-    satF = Math.max(clamp((maxRH - 88) / 8), maxCC / 100) * piecewise(satTop - satBase, [[0, 0.4], [150, 0.7], [400, 1]]);
+    if (b && a.RH > 90 && b.RH < 90) {
+      satTop = a.z + ((b.z - a.z) * (a.RH - 90)) / (a.RH - b.RH);
+      r.ztopRange = [a.z, b.z];
+    } else {
+      // Upper cloud boundary is not resolved: never fabricate a precise top.
+      satTop = null;
+      r.topEstimated = true;
+      r.ztopRange = b ? [a.z, b.z] : [a.z, null];
+    }
+    satF = Math.max(clamp((maxRH - 88) / 8), maxCC / 100) * (satTop == null ? 0.5 : piecewise(satTop - satBase, [[0, 0.4], [150, 0.7], [400, 1]]));
   }
 
   // B 型：辐射雾 / 谷雾（夜间晴空、弱风、近饱和、低层稳定）
   const low = prof[0];
-  const clearSky = 1 - (0.8 * Math.max(c.cm ?? 0, c.ch ?? 0)) / 100;
+  const clearSky = c.cm == null || c.ch == null ? null : 1 - (0.8 * Math.max(c.cm, c.ch)) / 100;
   const dd = low.T - low.Td;
-  const wsLow = low.ws ?? c.wind10 ?? 3;
+  const wsLow = low.ws ?? c.wind10 ?? null;
   const stableLow = lay.length ? piecewise(lay[0].dth, [[0, 0.2], [4, 0.6], [8, 1]]) : 0.3;
   const night = piecewise(c.sunElev, [[-5, 1], [5, 0.9], [15, 0.4], [30, 0.05]]);
-  let fogP = piecewise(dd, [[0, 1], [1.5, 0.8], [3, 0.45], [5, 0.1], [7, 0]])
+  let fogP = wsLow == null || clearSky == null ? null : piecewise(dd, [[0, 1], [1.5, 0.8], [3, 0.45], [5, 0.1], [7, 0]])
     * piecewise(wsLow, [[2, 1], [5, 0.6], [9, 0.15]]) * clearSky * stableLow * night;
-  const afterRain = c.rain24 >= 2 && c.precip < 0.1;
-  if (afterRain) fogP = Math.min(1, fogP * 1.25 + 0.05);
+  const afterRain = c.rain24 != null && c.precip != null && c.rain24 >= 2 && c.precip < 0.1;
+  if (afterRain && fogP != null) fogP = Math.min(1, fogP * 1.25 + 0.05);
   let fogTop = null;
-  if (fogP > 0.05) {
+  if (fogP != null && fogP > 0.05) {
     let top = low.z;
     for (const l of lay) {
       if (l.dth >= 6) top = l.z1;
       else break;
     }
-    fogTop = clamp(top, c.zValley + 100, c.zValley + 500);
+    // An upper pressure level is not a valley-surface observation. Resolve a
+    // fog top only when the lowest valid level is genuinely near valley floor.
+    fogTop = low.z <= c.zValley + 200 && top > low.z ? top : null;
   }
 
   let Fcloud;
-  if (satTop != null && satF >= fogP) {
+  if (satTop != null && satF >= (fogP ?? 0)) {
     Fcloud = satF; r.ztop = satTop; r.zbase = satBase; r.type = 'A';
-  } else if (fogTop != null && fogP > 0.08) {
+  } else if (fogTop != null && fogP != null && fogP > 0.08) {
     Fcloud = fogP; r.ztop = fogTop; r.zbase = c.zValley; r.type = 'B';
+    r.topEstimated = true;
+    r.ztopRange = [low.z, fogTop];
   } else {
-    Fcloud = Math.max(satF, fogP); r.ztop = satTop ?? fogTop; r.zbase = satBase;
+    Fcloud = Math.max(satF, fogP ?? 0); r.ztop = satTop ?? fogTop; r.zbase = satBase;
   }
   if (afterRain && r.type !== 'none') r.notes.push('afterRain');
   if (r.ztop != null) Fcloud *= piecewise(r.ztop - c.zValley, [[0, 0], [80, 0.4], [250, 1]]);
@@ -193,17 +203,20 @@ export function analyzeCloudSea(prof, c) {
 
   // 观测点上方通透度
   r.rhObs = interpAt(prof, c.zObs, 'RH');
-  const Fdry = piecewise(r.rhObs, [[60, 1], [80, 0.85], [90, 0.5], [97, 0.1]])
-    * (1 - (0.55 * (c.cm ?? 0)) / 100) * (1 - (0.2 * (c.ch ?? 0)) / 100);
+  const Fdry = r.rhObs == null || c.cm == null || c.ch == null ? null
+    : piecewise(r.rhObs, [[60, 1], [80, 0.85], [90, 0.5], [97, 0.1]])
+    * (1 - (0.55 * c.cm) / 100) * (1 - (0.2 * c.ch) / 100);
 
   r.wsObs = interpAt(prof, c.zObs, 'ws') ?? c.wind10;
-  const Fwind = r.wsObs == null ? 0.8 : piecewise(r.wsObs, [[4, 1], [8, 0.75], [12, 0.45], [18, 0.15]]);
-  const Fprecip = piecewise(c.precip ?? 0, [[0, 1], [0.1, 0.85], [0.5, 0.45], [2, 0.15]]);
+  const Fwind = r.wsObs == null ? null : piecewise(r.wsObs, [[4, 1], [8, 0.75], [12, 0.45], [18, 0.15]]);
+  const Fprecip = c.precip == null ? null : piecewise(c.precip, [[0, 1], [0.1, 0.85], [0.5, 0.45], [2, 0.15]]);
 
   const lg = (x) => Math.log(Math.max(x, 0.02));
-  const Q = Math.exp(0.35 * lg(Fcap) + 0.3 * lg(Fdry) + 0.15 * lg(Fwind) + 0.2 * lg(Fprecip));
+  const Q = [Fcap, Fdry, Fwind, Fprecip].some((v) => v == null) ? null
+    : Math.exp(0.35 * lg(Fcap) + 0.3 * lg(Fdry) + 0.15 * lg(Fwind) + 0.2 * lg(Fprecip));
   r.f = { cloud: Fcloud, height: Fheight, cap: Fcap, dry: Fdry, wind: Fwind, precip: Fprecip, Q };
-  r.P = 100 * Fcloud * Fheight * Q;
+  // P is an UNCALIBRATED suitability score (0..100), never a verified probability.
+  r.P = Q == null || r.ztop == null ? null : 100 * Fcloud * Fheight * Q;
   return r;
 }
 
@@ -212,6 +225,8 @@ export function analyzeCloudSea(prof, c) {
  * c: { zObs, alphaDeg, sea, cm, ch, precip, samples:[{x,cl,cm,ch}], aod }
  */
 export function analyzeSunrise(c) {
+  const hasDirectionCloud = Array.isArray(c.samples) && c.samples.length >= 3
+    && c.samples.every((s) => s.cl != null && s.cm != null && s.ch != null);
   const lowTop = c.sea?.type === 'A' && c.sea.ztop != null ? clamp(c.sea.ztop, 800, 3000) : 2000;
   const per = c.samples.map((s) => {
     const H = rayHeight(s.x, c.zObs, c.alphaDeg);
@@ -224,27 +239,28 @@ export function analyzeSunrise(c) {
     return { x: s.x, H, t, cl: s.cl, cm: s.cm, ch: s.ch };
   });
   const meanLn = (arr) => (arr.length ? arr.reduce((a, p) => a + Math.log(Math.max(p.t, 0.02)), 0) / arr.length : 0);
-  const Ptrans = Math.exp(1.5 * meanLn(per));
+  const Ptrans = hasDirectionCloud ? Math.exp(1.5 * meanLn(per)) : null;
 
   let inCloud = 0;
   if (c.sea?.margin != null) inCloud = piecewise(c.sea.margin, [[-150, 1], [0, 0.6], [80, 0]]) * clamp((c.sea.f.cloud ?? 0) * 1.2);
   if (c.sea?.rhObs != null) inCloud = Math.max(inCloud, piecewise(c.sea.rhObs, [[93, 0], [98, 0.7], [100, 0.9]]));
 
-  const Fp = piecewise(c.precip ?? 0, [[0, 1], [0.1, 0.8], [0.5, 0.35], [2, 0.1]]);
-  const Pvis = 100 * Ptrans * (1 - inCloud) * Fp;
+  const Fp = c.precip == null ? null : piecewise(c.precip, [[0, 1], [0.1, 0.8], [0.5, 0.35], [2, 0.1]]);
+  const Pvis = Ptrans == null || Fp == null ? null : 100 * Ptrans * (1 - inCloud) * Fp;
 
-  const canvas = 100 * (1 - (1 - (c.cm ?? 0) / 100) * (1 - (c.ch ?? 0) / 100));
-  const Fcanvas = piecewise(canvas, [[0, 0.12], [15, 0.45], [30, 0.9], [60, 1], [80, 0.6], [95, 0.25], [100, 0.12]]);
+  const canvas = c.cm == null || c.ch == null ? null : 100 * (1 - (1 - c.cm / 100) * (1 - c.ch / 100));
+  const Fcanvas = canvas == null ? null : piecewise(canvas, [[0, 0.12], [15, 0.45], [30, 0.9], [60, 1], [80, 0.6], [95, 0.25], [100, 0.12]]);
   const far = per.filter((p) => p.x >= 120000);
-  const farT = far.length ? Math.exp(meanLn(far)) : Ptrans;
+  const farT = hasDirectionCloud && far.length ? Math.exp(meanLn(far)) : null;
   const Faer = c.aod == null ? 0.85
     : piecewise(c.aod, [[0, 0.75], [0.08, 0.95], [0.15, 1], [0.35, 0.95], [0.6, 0.6], [1, 0.3], [2, 0.12]]);
-  const glow = 100 * Fcanvas * farT ** 0.8 * Faer * Fp * (1 - 0.7 * inCloud);
+  const glow = Fcanvas == null || farT == null || Fp == null ? null
+    : 100 * Fcanvas * farT ** 0.8 * Faer * Fp * (1 - 0.7 * inCloud);
   return { Pvis, glow, Ptrans, farT, inCloud, canvas, Fcanvas, Faer, per, lowTop };
 }
 
 export function stats(arr) {
-  const v = arr.filter((x) => x != null && !Number.isNaN(x));
+  const v = arr.filter((x) => x != null && Number.isFinite(x));
   if (!v.length) return { mean: null, min: null, max: null, n: 0, sd: null };
   const mean = v.reduce((a, b) => a + b, 0) / v.length;
   const sd = Math.sqrt(v.reduce((a, b) => a + (b - mean) ** 2, 0) / v.length);
@@ -310,11 +326,15 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
     for (const m of models) {
       const s = m.surf;
       let rain24 = 0;
-      for (let j = Math.max(0, i - 24); j < i; j++) rain24 += s.precip?.[j] ?? 0;
+      for (let j = Math.max(0, i - 24); j < i; j++) {
+        const rain = s.precip?.[j];
+        if (rain == null) { rain24 = null; break; }
+        rain24 += rain;
+      }
       const prof = buildProfile(m, i, site.zValley);
       const res = analyzeCloudSea(prof, {
         zObs: site.zObs, zValley: site.zValley,
-        cm: s.cm?.[i], ch: s.ch?.[i], precip: s.precip?.[i] ?? 0,
+        cm: s.cm?.[i], ch: s.ch?.[i], precip: s.precip?.[i] ?? null,
         rain24, sunElev: sunEl[i], wind10: s.wind10?.[i],
       });
       res.prof = prof;
@@ -357,10 +377,10 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         })).filter((p) => p.cl != null || p.cm != null);
         const sun = analyzeSunrise({
           zObs: site.zObs, alphaDeg: geo.alpha, sea: seaAtRise,
-          cm: s.cm?.[riseIdx], ch: s.ch?.[riseIdx], precip: s.precip?.[riseIdx] ?? 0,
+          cm: s.cm?.[riseIdx], ch: s.ch?.[riseIdx], precip: s.precip?.[riseIdx] ?? null,
           samples, aod: air.aod,
         });
-        if (geo.blocked) sun.Pvis *= piecewise(geo.terrainAngle - -geo.dip, [[0, 1], [1, 0.9], [3, 0.75]]);
+        if (geo.blocked && sun.Pvis != null) sun.Pvis *= piecewise(geo.terrainAngle + geo.dip, [[0, 1], [1, 0.9], [3, 0.75]]);
         const T2 = s.T2?.[riseIdx];
         const ws = seaAtRise?.wsObs ?? s.wind10?.[riseIdx];
         per[m.id] = {

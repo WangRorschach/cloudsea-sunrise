@@ -17,7 +17,7 @@ const LIMIT_TXT = {
   wind: '观测高度风大，云面易被吹散',
   precip: '有降水',
 };
-const SEA_ON = 20; // 集合概率 ≥20% 记为“有云海”时段
+const SEA_ON = 20; // 集合指数 ≥20% 记为“有云海”时段
 
 // 某一小时的多模式汇总
 export function hourAgg(res, fc, i) {
@@ -27,7 +27,7 @@ export function hourAgg(res, fc, i) {
   const votes = {};
   V.forEach(([, r]) => { if ((r.P ?? 0) >= 8) votes[r.type] = (votes[r.type] ?? 0) + 1; });
   const type = Object.entries(votes).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'none';
-  const withCloud = V.filter(([, r]) => r.ztop != null && (r.P ?? 0) >= 8);
+  const withCloud = V.filter(([, r]) => r.ztop != null);
   const fMean = (k) => stats(V.map(([, r]) => r.f?.[k])).mean;
   const f = Object.fromEntries(Object.keys(LIMIT_TXT).map((k) => [k, fMean(k)]));
   // 没有成云时“高度裕度”无意义（无云顶），此时限制因子归为成云条件
@@ -96,7 +96,7 @@ export function summaryHtml(res, fc, site, day, hm) {
   if (!eps.length) {
     const pk = day.idx.reduce((a, b) => ((res.hours[b].P.mean ?? 0) > (res.hours[a].P.mean ?? 0) ? b : a), day.idx[0]);
     const a = hourAgg(res, fc, pk);
-    out.push(`<p class="cs-lead none">当天<b>没有明显的云海时段</b>（全天集合概率均低于 ${SEA_ON}%，最高 ${r0(a.P.mean, '%')}，出现在 ${hh(a.local)} 时）。</p>`);
+    out.push(`<p class="cs-lead none">当天<b>没有明显的云海时段</b>（全天集合指数均低于 ${SEA_ON}%，最高 ${r0(a.P.mean, '%')}，出现在 ${hh(a.local)} 时）。</p>`);
     if (a.limit) out.push(`<p>主要限制因子：<b>${a.limit.txt}</b>（因子值 ${a.limit.v.toFixed(2)}，1 为最有利）。</p>`);
   } else {
     out.push(`<p class="cs-lead">当天有 <b>${eps.length}</b> 个云海时段：</p><ol class="cs-eps">${eps.map((e) => {
@@ -110,7 +110,7 @@ export function summaryHtml(res, fc, site, day, hm) {
         峰值 <b>${hh(pk.local)} 时 ${r0(pk.P.mean, '%')}</b>（${models}）${e.clearAt ? `；预计 ${hm(e.clearAt)} 前后减弱` : ''}。</li>`;
     }).join('')}</ol>`);
   }
-  out.push(`<p>日出 ${hm(day.rise.time)} 时：云海概率 <b>${r0(riseAgg.P.mean, '%')}</b>（模式范围 ${r0(riseAgg.P.min)}–${r0(riseAgg.P.max)}%）${riseAgg.ztop.mean != null && (riseAgg.P.mean ?? 0) >= 8 ? `，云顶 ${r0(riseAgg.ztop.mean)} m` : ''}；观测高度相对湿度 ${r0(riseAgg.rh.mean, '%')}，低云量 ${r0(riseAgg.cl.mean, '%')}${riseAgg.limit && (riseAgg.P.mean ?? 0) < 40 ? `；最主要的限制是“${riseAgg.limit.txt}”` : ''}。</p>`);
+  out.push(`<p>日出 ${hm(day.rise.time)} 时：云海条件指数 <b>${r0(riseAgg.P.mean, '%')}</b>（模式范围 ${r0(riseAgg.P.min)}–${r0(riseAgg.P.max)}%）${riseAgg.ztop.mean != null && (riseAgg.P.mean ?? 0) >= 8 ? `，云顶 ${r0(riseAgg.ztop.mean)} m` : ''}；观测高度相对湿度 ${r0(riseAgg.rh.mean, '%')}，低云量 ${r0(riseAgg.cl.mean, '%')}${riseAgg.limit && (riseAgg.P.mean ?? 0) < 40 ? `；最主要的限制是“${riseAgg.limit.txt}”` : ''}。</p>`);
   return out.join('');
 }
 
@@ -127,11 +127,11 @@ export function heatmapHtml(res, days, { selected, dayLabel, relDay }) {
       const i = byKey.get(key);
       if (i == null) return '<span class="hm-c na"></span>';
       const h = res.hours[i];
-      const p = h.P.mean ?? 0;
+      const p = h.P.mean;
       const zt = h.ztop.mean;
       const night = h.sunEl < -6;
-      const tip = `${L.md} ${k}时 · 云海 ${Math.round(p)}%（${r0(h.P.min)}–${r0(h.P.max)}%）${zt != null && p >= 8 ? ` · 云顶 ${Math.round(zt)} m` : ''}`;
-      return `<span class="hm-c${night ? ' night' : ''}${k === +riseH ? ' rise' : ''}${i === selected ? ' sel' : ''}" data-i="${i}" title="${tip}" style="background:${heatColor(p, night)};color:${p >= 45 ? '#0b1220' : '#dfe8f6'}">${p >= 15 ? Math.round(p) : ''}</span>`;
+      const tip = `${L.md} ${k}时 · 云海条件指数 ${r0(p)}/100（${r0(h.P.min)}–${r0(h.P.max)}%）${zt != null && p >= 8 ? ` · 云顶 ${Math.round(zt)} m` : ''}`;
+      return `<span class="hm-c${night ? ' night' : ''}${k === +riseH ? ' rise' : ''}${i === selected ? ' sel' : ''}" data-i="${i}" title="${tip}" style="background:${p == null ? 'rgba(110,120,145,.18)' : heatColor(p, night)};color:${p != null && p >= 45 ? '#0b1220' : '#dfe8f6'}">${p != null && p >= 15 ? Math.round(p) : ''}</span>`;
     }).join('');
     return `<div class="hm-row${d.past ? ' past' : ''}"><span class="hm-d">${relDay(d.key) ?? L.w}<small>${L.md}</small></span>${cells}</div>`;
   }).join('');
@@ -145,15 +145,15 @@ export function hourTableHtml(res, fc, site, day, selected) {
   const rows = [];
   for (let i = first; i <= last; i++) {
     const a = hourAgg(res, fc, i);
-    const p = a.P.mean ?? 0;
-    const has = p >= 8 && a.ztop.mean != null;
+    const p = a.P.mean;
+    const has = a.ztop.mean != null;
     const rel = has ? site.zObs - a.ztop.mean : null;
     const pos = !has ? '—' : rel >= 150 ? `<span class="ok">云上 +${r0(rel)}</span>` : rel >= 0 ? `<span class="warn">贴近 +${r0(rel)}</span>` : `<span class="bad">云中 ${r0(rel)}</span>`;
     const thick = has && a.zbase.mean != null ? a.ztop.mean - a.zbase.mean : null;
     rows.push(`<tr data-i="${i}" class="${i === day.riseIdx ? 'rise' : ''}${i === selected ? ' sel' : ''}">
       <td>${a.local.slice(5, 10).replace('-', '/')} <b>${hh(a.local)}时</b>${i === day.riseIdx ? ' <i class="rise-dot" title="日出">☀</i>' : ''}</td>
       <td>${r0(a.sunEl, '°')}</td>
-      <td><span class="pbar" style="--p:${p / 100}"><b>${r0(p)}</b></span><small>${r0(a.P.min)}–${r0(a.P.max)}</small></td>
+      <td><span class="pbar" style="--p:${(p ?? 0) / 100}"><b>${r0(p)}</b></span><small>${r0(a.P.min)}–${r0(a.P.max)}</small></td>
       <td>${has ? TYPE_TXT[a.type].replace('云海', '').replace(' / 谷雾型', '') : '—'}</td>
       <td>${has ? `${r0(a.zbase.mean)}–${r0(a.ztop.mean)}` : '—'}</td>
       <td>${r0(thick)}</td>
@@ -166,7 +166,7 @@ export function hourTableHtml(res, fc, site, day, selected) {
       <td class="lim">${p >= 60 ? '<span class="ok">条件理想</span>' : a.limit ? esc(a.limit.txt) : '—'}</td>
     </tr>`);
   }
-  return `<table class="cs-table"><thead><tr><th>时刻</th><th>太阳</th><th>云海概率 %</th><th>类型</th><th>云底–云顶 m</th><th>厚度 m</th><th>观测点相对云顶</th><th>低云量</th><th>山顶 RH</th><th>逆温 K/km</th><th>风 m/s</th><th>降水 mm</th><th>主要限制</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  return `<table class="cs-table"><thead><tr><th>时刻</th><th>太阳</th><th>云海条件指数 %</th><th>类型</th><th>云底–云顶 m</th><th>厚度 m</th><th>观测点相对云顶</th><th>低云量</th><th>山顶 RH</th><th>逆温 K/km</th><th>风 m/s</th><th>降水 mm</th><th>主要限制</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
 }
 
 // 观测点周边地形网格（半径 10 km，用于估算云海覆盖面积与露出云面的山峰）
@@ -210,7 +210,7 @@ export async function nearbySpots(site, pois, km = 12) {
 
 export function spotsHtml(spots, a, site) {
   if (!spots?.length) return '<p class="empty">附近 12 km 内没有收录的山峰、观景台或客栈。</p>';
-  const has = (a.P.mean ?? 0) >= 8 && a.ztop.mean != null;
+  const has = a.ztop.mean != null;
   const zt = a.ztop.mean;
   const rows = [...spots].sort((x, y) => y.ele - x.ele).slice(0, 16).map((p) => {
     const rel = has ? p.ele - zt : null;

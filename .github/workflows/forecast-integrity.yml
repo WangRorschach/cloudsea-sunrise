@@ -1,0 +1,26 @@
+name: Forecast integrity checks
+
+on:
+  push:
+    branches:
+      - fix/forecast-integrity-20261116
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  forecast-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check JS syntax
+        run: |
+          node --check js/model.js
+          node --check js/app.js
+          node --check js/cloudsea.js
+          node --check js/obs.js
+          node --check test/forecast-integrity.mjs
+      - name: Regression tests (offline)
+        run: node test/forecast-integrity.mjs

@@ -97,7 +97,7 @@
           <div class="cs-summary" id="cs-summary"></div>
           <div class="cs-now" id="cs-now"></div>
         </div>
-        <h4 class="cs-h">7 天 × 24 小时云海概率 <small>数字为集合平均 %，橙色下划线为日出所在小时，暗格为夜间</small></h4>
+        <h4 class="cs-h">7 天 × 24 小时云海条件指数 <small>数字为集合指数 /100，橙色下划线为日出所在小时，暗格为夜间</small></h4>
         <div class="heatmap" id="cs-heat"></div>
         <h4 class="cs-h">云层高度走势 <small>白色带 = 预测云层（云底–云顶），浅色带 = 各模式云顶范围；云顶低于黄线才能俯瞰云海</small></h4>
         <div class="chart-box"><canvas id="chart-cloudlayer"></canvas></div>
@@ -107,7 +107,7 @@
         <div class="table-wrap" id="cs-spots"></div>
       </div>
       <div class="card chart-card wide">
-        <div class="chart-head"><h3>逐小时云海概率 · 多模式集合</h3><small>点击图表跳转时刻；黄色柱为日出时刻，阴影为模式范围</small></div>
+        <div class="chart-head"><h3>逐小时云海条件指数 · 多模式集合</h3><small>点击图表跳转时刻；黄色柱为日出时刻，阴影为模式范围</small></div>
         <div class="chart-box"><canvas id="chart-timeline"></canvas></div>
       </div>
       <div class="card chart-card">
@@ -163,7 +163,7 @@
     数据：<a href="https://open-meteo.com" target="_blank" rel="noopener">Open-Meteo</a>（ECMWF / NCEP / DWD / CMA / JMA 模式、Copernicus DEM、CAMS 气溶胶）·
     <a href="https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api" target="_blank" rel="noopener">NASA GIBS</a> 卫星 ·
     Mapterhorn 地形 · OpenStreetMap 地点 · Esri / OpenTopoMap 底图。
-    预测为基于物理诊断的概率参考，不替代官方气象预警与现场判断；山区徒步请量力而行。
+    预测为基于物理诊断的条件评估参考，不替代官方气象预警与现场判断；山区徒步请量力而行。
   </footer>
   <nav class="mnav" aria-label="主导航">
     <button data-tab="forecast" class="active"><i>⛰</i>预测</button>
