@@ -33,7 +33,7 @@ for (let i = 3; i < uncertain.length; i++) {
   uncertain[i].Td = dewpoint(uncertain[i].T, 95);
 }
 uncertain[0].ws = 20; // suppress separate radiative-fog branch in this test
-const top = analyzeCloudSea(uncertain, ctx);
+const top = analyzeCloudSea(uncertain, { ...ctx, cm: 100, ch: 100 });
 assert.equal(top.P, null, 'unbounded cloud top cannot create a precise lookout score');
 assert.ok(top.topEstimated);
 const sunrise = {
