@@ -483,3 +483,14 @@ body.noscroll { overflow: hidden; }
   .live-diagnostic p { display: none; }
   .live-diagnostic .ld-meta { flex-wrap: wrap; }
 }
+
+/* Explain the heuristic score instead of presenting it as a calibrated probability. */
+.data-diagnostics { color: #c4d2e7; font-size: 12px; line-height: 1.6; background: rgba(115,151,195,.10); border: 1px solid rgba(115,151,195,.20); padding: 9px 11px; border-radius: 8px; }
+.score-explain { border: 1px solid rgba(115,151,195,.20); border-radius: 9px; margin: 12px 0; padding: 10px 12px; color: #c4d2e7; font-size: 12px; }
+.score-explain summary { cursor: pointer; font-weight: 600; color: #e6eefb; }
+.score-explain p { line-height: 1.7; margin: 10px 0; }
+.score-mode-list { display: grid; gap: 6px; margin-top: 8px; }
+.score-mode-list > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; border-top: 1px solid rgba(155,173,200,.12); padding-top: 8px; }
+.score-mode-list b { color: #e5efff; }
+.score-mode-list span { color: #efbf7b; }
+.score-mode-list small { display: block; flex-basis: 100%; color: #a8bad3; font-size: 11px; line-height: 1.6; }
