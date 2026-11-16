@@ -209,10 +209,10 @@ function level(p) {
   return { cls: 'lo', txt: '基本无' };
 }
 function confidence(st) {
-  if (st.n < 2 || st.sd == null) return '单模式，置信度未知';
-  if (st.sd < 10) return '模式一致 · 置信度高';
-  if (st.sd < 20) return '模式略有分歧 · 置信度中';
-  return '模式分歧大 · 置信度低';
+  if (st.n < 2 || st.sd == null) return '单模式 · 未验证';
+  if (st.sd < 10) return '模式判断较一致 · 未校准';
+  if (st.sd < 20) return '模式存在一定分歧 · 未校准';
+  return '模式分歧明显 · 未校准';
 }
 
 function reasons(d) {
@@ -222,7 +222,7 @@ function reasons(d) {
   if (d.type === 'A') out.push(`<b>层积云型</b>：多数模式在低层诊断出饱和层（RH≥92% 或云量≥70%），云顶约 <b>${r0(zt)} m</b>。`);
   else if (d.type === 'B') out.push(`<b>辐射雾 / 谷雾型</b>：夜间晴空弱风、谷底接近饱和，雾顶约 <b>${r0(zt)} m</b>，通常日出后 1–2 小时消散。`);
   else out.push('多数模式在观测点以下<b>未诊断出饱和云层</b>，低层偏干或混合较强。');
-  const hasSea = d.type !== 'none' && (d.sea.mean ?? 0) >= 12;
+  const hasSea = d.type !== 'none' && d.ztop.mean != null;
   if (zt != null && hasSea) {
     const m = s.zObs - zt;
     if (m >= 200) out.push(`云顶低于观测点约 <b>${r0(m)} m</b>，站位可俯瞰云面。`);
@@ -244,7 +244,7 @@ function reasons(d) {
   }
   const vis = d.vis.mean;
   if (vis != null) {
-    if (S.horizonOk === false) out.push('远方云量数据获取失败，日出可见度仅基于本地云量估算。');
+    if (S.horizonOk === false) out.push('远方云量数据获取失败，日出遮云条件暂不可判定。');
     else if (vis >= 60) out.push(`日出方向 300 km 光路上云层稀薄，<b>日出大概率可见</b>。`);
     else if (vis >= 30) out.push('日出方向光路上有部分云层，太阳可能从云缝中露出。');
     else out.push('日出方向光路上云层较厚或身处云中，<b>日出可能被遮挡</b>。');
@@ -281,11 +281,11 @@ function renderDetail(d) {
   $('#detail').innerHTML = `
     <h3>${relDay(d.key) ? `${relDay(d.key)} · ` : ''}${L.md} ${L.w} · 日出 ${hm(d.rise.time)}</h3>
     <div class="verdict">
-      <span class="tag ${lv.cls}">云海${lv.txt}</span><span class="tag ${lvSun.cls === 'hi' ? 'hi' : lvSun.cls}">日出${lvSun.txt}</span><span class="tag conf">${confidence(d.sea)}</span>
+      <span class="tag ${lv.cls}">云海条件${lv.txt}</span><span class="tag ${lvSun.cls === 'hi' ? 'hi' : lvSun.cls}">日出条件${lvSun.txt}</span><span class="tag conf">${confidence(d.sea)}</span>
     </div>
     <div class="trio">
-      <div><small>云海概率</small><b>${r0(d.sea.mean)}</b><span>% · ${r0(d.sea.min)}–${r0(d.sea.max)}</span></div>
-      <div><small>日出可见</small><b class="sun">${r0(d.vis.mean)}</b><span>% · ${r0(d.vis.min)}–${r0(d.vis.max)}</span></div>
+      <div><small>云海条件指数</small><b>${r0(d.sea.mean)}</b><span>/100 · ${r0(d.sea.min)}–${r0(d.sea.max)}</span></div>
+      <div><small>日出遮云指数</small><b class="sun">${r0(d.vis.mean)}</b><span>/100 · ${r0(d.vis.min)}–${r0(d.vis.max)}</span></div>
       <div><small>朝霞指数</small><b>${r0(d.glow.mean)}</b><span>/ 100</span></div>
     </div>
     <ul class="why">${reasons(d).map((x) => `<li>${x}</li>`).join('')}</ul>
@@ -363,11 +363,12 @@ function setHour(i, { fromDay = false } = {}) {
   const P = h.P.mean;
   const zt = h.ztop.mean;
   $('#hour-label').innerHTML = `<b>${L.md} ${h.local.slice(11, 16)}</b> · 太阳 ${h.sunEl.toFixed(0)}° · 云海 <b>${r0(P, '%')}</b>${zt != null ? ` · 云顶 ${r0(zt, ' m')}` : ''}`;
-  const show = P != null && P >= 8 && zt != null;
+  // Cloud existence is independent of the viewpoint's suitability score.
+  const show = zt != null;
   const tint = h.sunEl < -6 ? 'night' : h.sunEl < 10 ? 'dawn' : 'day';
   const a = agg(i);
-  const cover = Math.min(1, 0.25 + P / 90 + (a.cl.mean ?? 0) / 400);
-  M.setCloudTop(show ? zt : null, tint, { P, cover, center: S.site, sunAz: S.res.days[S.day]?.rise.azimuth });
+  const cover = Math.min(1, 0.25 + (a.cl.mean ?? 0) / 120);
+  M.setCloudTop(show ? zt : null, tint, { P: P ?? 0, cover, center: S.site, sunAz: S.res.days[S.day]?.rise.azimuth });
   renderLegend(h, show);
   drawProfile(h, S.site, S.model);
   drawTimeline(S.res, S.fc.offset, { selected: i, nowMs: Date.now(), onSelect: onTimelinePick });
@@ -450,7 +451,7 @@ function renderLegend(h, show) {
   const zt = h.ztop;
   $('#legend').innerHTML = show
     ? `<b>预测云海面（3D）</b><br><span class="sw" style="background:#f4f6fb"></span>云顶 ${r0(zt.mean)} m，观测点周边 24 km；高于云顶的山峰露出<br>模式范围 ${r0(zt.min)}–${r0(zt.max)} m（${zt.n} 个模式）<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`
-    : `<b>此刻无显著云海</b><br>集合概率 &lt; 8% 或未诊断出云顶<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`;
+    : `<b>此刻云层高度资料不足</b><br>不能据此认定天空无云<br><span class="sw" style="background:#ffb347;border-radius:50%"></span>日出光路采样点（% 为光线透过率）`;
 }
 
 function stopPlay() {
@@ -701,7 +702,7 @@ async function share() {
   const s = S.site;
   const d = S.res?.days[S.day];
   const title = `云海·日出预报｜${s?.name ?? ''}`;
-  const text = d ? `${s.name} ${d.key} 日出 ${hm(d.rise.time)}：云海 ${r0(d.sea.mean, '%')}、日出可见 ${r0(d.vis.mean, '%')}、朝霞 ${r0(d.glow.mean, '%')}` : title;
+  const text = d ? `${s.name} ${d.key} 日出 ${hm(d.rise.time)}：云海条件指数 ${r0(d.sea.mean, '/100')}、日出遮云指数 ${r0(d.vis.mean, '/100')}、朝霞指数 ${r0(d.glow.mean, '/100')}（未经概率校准）` : title;
   const url = /^https?:/.test(location.protocol) ? location.href : null;
   try {
     if (navigator.share) { await navigator.share(url ? { title, text, url } : { title, text }); return; }
