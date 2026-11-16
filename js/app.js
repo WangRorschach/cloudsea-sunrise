@@ -258,6 +258,9 @@ function hikeAlerts(d) {
   const s = S.site;
   const h = d.hike;
   const a = [];
+  if (h.T.n === 0 || h.ws.n === 0 || h.gust.n === 0 || h.precip.n === 0) {
+    a.push('气温、风、阵风或降水资料不完整，不能据此判定登山气象风险低。');
+  }
   if (h.feels.min != null && h.feels.min <= -10) a.push(`体感温度低至 ${r0(h.feels.min)}°C，注意防寒，手指与面部易冻伤。`);
   else if (h.feels.min != null && h.feels.min <= 0) a.push(`体感温度约 ${r0(h.feels.mean)}°C，需要保暖外套、手套与帽子。`);
   if (h.gust.max != null && h.gust.max >= 17) a.push(`阵风可达 ${r0(h.gust.max)} m/s（${Math.round(h.gust.max * 3.6)} km/h），山脊行走危险。`);
