@@ -223,15 +223,22 @@ export function analyzeCloudSea(prof, c) {
   const missingFields = [
     ['cm', c.cm], ['ch', c.ch], ['precip', c.precip], ['obsRH', r.rhObs], ['obsWind', r.wsObs],
   ].filter(([, v]) => v == null).map(([k]) => k);
-  r.P = Q == null ? null
+  // A dry upper profile cannot exclude shallow fog in an unsampled valley.
+  const lowCeiling = Math.max(c.zValley + 300, c.zObs);
+  const lowCoverage = low.z <= c.zValley + 300 && prof.at(-1).z >= lowCeiling
+    && lay.every((l) => l.z0 >= lowCeiling || l.z1 - l.z0 <= 650);
+  const insufficientLow = noCloudEvidence && !lowCoverage;
+  r.P = Q == null || insufficientLow ? null
     : r.ztop != null ? 100 * Fcloud * Fheight * Q
       : noCloudEvidence ? 0 : null;
   r.diagnosis = Q == null ? 'missing-input'
-    : r.ztop != null ? 'resolved-cloud'
+    : insufficientLow ? 'insufficient-profile'
+      : r.ztop != null ? 'resolved-cloud'
       : noCloudEvidence ? 'unfavorable' : 'unresolved-cloud-top';
   r.missingFields = missingFields;
   r.diagnosisDetails = r.diagnosis === 'missing-input'
     ? `关键输入不完整：${missingFields.join(', ') || '评分因子不可计算'}`
+    : insufficientLow ? '谷底至观测点的气压层覆盖不足，无法排除浅层云雾'
     : r.diagnosis === 'unresolved-cloud-top'
       ? '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分'
       : r.diagnosis === 'unfavorable'
@@ -382,13 +389,21 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
       if (!rise) return null;
       const riseIdx = nearestIdx(fc.times, rise.time);
       const win = d.idx.filter((i) => fc.times[i] >= rise.time - 100 * 60e3 && fc.times[i] <= rise.time + 50 * 60e3);
-      const air = aqAt(rise.time);
+      const bestIdx = win.reduce((best, i) => {
+      const candidate = hours[i].P;
+      if (candidate.mean == null) return best;
+      if (best == null) return i;
+      const current = hours[best].P;
+      return candidate.mean > current.mean || (candidate.mean === current.mean && candidate.n > current.n) ? i : best;
+    }, null);
+    const cloudHour = hours[bestIdx ?? riseIdx];
+    const air = aqAt(rise.time);
       const hp = horizon?.points?.filter((p) => p.day === dayIndex) ?? [];
       const hk = horizon?.times?.length ? nearestIdx(horizon.times, rise.time) : -1;
 
       const per = {};
       for (const m of models) {
-        const seaVals = win.map((i) => hours[i].models[m.id]?.P).filter((x) => x != null);
+        const seaAtBest = cloudHour.models[m.id];
         const seaAtRise = hours[riseIdx].models[m.id];
         const s = m.surf;
         const samples = hp.map((p) => ({
@@ -406,8 +421,8 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         const T2 = s.T2?.[riseIdx];
         const ws = seaAtRise?.wsObs ?? s.wind10?.[riseIdx];
         per[m.id] = {
-          sea: seaVals.length ? Math.max(...seaVals) : null,
-          seaAtRise, sun,
+          sea: bestIdx == null ? null : seaAtBest.P,
+          seaAtBest, seaAtRise, sun,
           hike: {
             T: T2, ws, gust: s.gust?.[riseIdx], feels: T2 != null && ws != null ? windChill(T2, ws) : null,
             frz: s.frz?.[riseIdx], vis: s.vis?.[riseIdx], precip: s.precip?.[riseIdx],
@@ -415,26 +430,26 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         };
       }
       const V = Object.values(per);
-      const bestIdx = win.length ? win.reduce((a, b) => ((hours[b].P.mean ?? -1) > (hours[a].P.mean ?? -1) ? b : a)) : riseIdx;
+      const scored = V.map((v) => v.seaAtBest).filter((r) => bestIdx != null && Number.isFinite(r.P));
       const typeVotes = {};
-      V.forEach((v) => { const ty = v.seaAtRise?.type ?? 'none'; typeVotes[ty] = (typeVotes[ty] ?? 0) + 1; });
+      scored.forEach(({ type }) => { typeVotes[type] = (typeVotes[type] ?? 0) + 1; });
       return {
         key: d.key, idx: d.idx, geo, rise, riseIdx, win, bestIdx, air, models: per,
         past: rise.time < now - 3600e3,
         sea: stats(V.map((v) => v.sea)),
         vis: stats(V.map((v) => v.sun.Pvis)),
         glow: stats(V.map((v) => v.sun.glow)),
-        ztop: stats(V.map((v) => v.seaAtRise?.ztop)),
-        cap: stats(V.map((v) => v.seaAtRise?.cap)),
+        ztop: stats(scored.map((r) => r.ztop)),
+        cap: stats(scored.map((r) => r.cap)),
         type: Object.entries(typeVotes).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'none',
-        afterRain: V.some((v) => v.seaAtRise?.notes?.includes('afterRain')),
+        afterRain: scored.some((r) => r.notes.includes('afterRain')),
         hike: {
           T: stats(V.map((v) => v.hike.T)), feels: stats(V.map((v) => v.hike.feels)),
           ws: stats(V.map((v) => v.hike.ws)), gust: stats(V.map((v) => v.hike.gust)),
           frz: stats(V.map((v) => v.hike.frz)), precip: stats(V.map((v) => v.hike.precip)),
         },
         factors: Object.fromEntries(['cloud', 'height', 'cap', 'dry', 'wind', 'precip']
-          .map((k) => [k, stats(V.map((v) => v.seaAtRise?.f?.[k]))])),
+          .map((k) => [k, stats(scored.map((r) => r.f[k]))])),
       };
     })
     .filter(Boolean);

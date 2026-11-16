@@ -1,6 +1,6 @@
 // 页面控制：加载流程、面板渲染、地图与图表联动、观测记录
 /* global maplibregl */
-import { MODELS, runForecast } from './model.js';
+import { MODELS, runForecast } from './model.js?v=20261116-r6';
 import { findRise } from './sun.js';
 import {
   fetchSiteTerrain, fetchForecast, fetchHorizon, fetchAirQuality, fetchTerrainProfile,
@@ -21,8 +21,8 @@ const scoreText = (p) => p == null ? '—' : p > 0 && p < 0.5 ? '<1' : String(Ma
 const diagnosticLabel = (r) => r?.diagnosisDetails ?? '无有效气压层或该模式暂未提供此时段资料';
 const dailyDataNote = (d) => {
   const ms = Object.values(d.models ?? {});
-  const unresolved = ms.filter((m) => m.seaAtRise?.diagnosis === 'unresolved-cloud-top').length;
-  const missing = ms.filter((m) => ['missing-input', 'insufficient-profile'].includes(m.seaAtRise?.diagnosis)).length;
+  const unresolved = ms.filter((m) => m.seaAtBest?.diagnosis === 'unresolved-cloud-top').length;
+  const missing = ms.filter((m) => ['missing-input', 'insufficient-profile'].includes(m.seaAtBest?.diagnosis)).length;
   const known = d.sea.n;
   return known ? `有效评分 ${known}/${ms.length} 模式${unresolved || missing ? ` · 云顶未解 ${unresolved} · 输入不足 ${missing}` : ''}`
     : `无法计算：云顶未解 ${unresolved} · 资料不足 ${missing}`;
@@ -173,6 +173,7 @@ function renderDays() {
       <div class="sea" title="${esc(dailyDataNote(d))}">
         <div class="lbl"><span>云海 · 日出 ${hm(d.rise.time)}</span><b>${scoreText(d.sea.mean)}${d.sea.mean == null ? '' : '/100'}</b></div>
         <div class="meter" title="条件指数模式范围 ${r0(mn)}–${r0(mx)} /100"><span class="rng" style="left:${mn}%;width:${mx - mn}%"></span><span class="val" style="width:${d.sea.mean ?? 0}%"></span></div>
+        <small>${d.sea.n}/${Object.keys(d.models).length} 模式${d.bestIdx == null ? '' : ` · ${hm(S.res.hours[d.bestIdx].t)}`}</small>
       </div>
       <div class="m">日出<b class="sun">${scoreText(d.vis.mean)}${d.vis.mean == null ? '' : '/100'}</b></div>
       <div class="m">朝霞<b>${r0(d.glow.mean)}</b></div>
@@ -298,13 +299,13 @@ function renderDetail(d) {
     </div>
     <div class="trio">
       <div><small>云海条件指数</small><b>${scoreText(d.sea.mean)}</b><span>${d.sea.mean == null ? '无法计算' : `/100 · ${r0(d.sea.min)}–${r0(d.sea.max)}`}</span></div>
-      <div><small>日出遮云指数</small><b class="sun">${r0(d.vis.mean)}</b><span>/100 · ${r0(d.vis.min)}–${r0(d.vis.max)}</span></div>
+      <div><small>日出可见条件指数</small><b class="sun">${r0(d.vis.mean)}</b><span>/100 · ${r0(d.vis.min)}–${r0(d.vis.max)}</span></div>
       <div><small>朝霞指数</small><b>${r0(d.glow.mean)}</b><span>/ 100</span></div>
     </div>
-    <p class="data-diagnostics">${esc(dailyDataNote(d))}。0 表示规则评分不利，— 表示无法计算；两者都不是实测发生概率。</p>
+    <p class="data-diagnostics">${esc(dailyDataNote(d))}${d.ztop.n ? ` · 云顶范围 ${r0(d.ztop.min)}–${r0(d.ztop.max)} m（${d.ztop.n} 个模式）` : ''}。0 表示规则评分不利，— 表示无法计算；两者都不是实测发生概率。</p>
     <details class="score-explain"><summary>查看评分公式与每个天气模式的计算依据</summary>
       <p>云海条件指数 S = 100 × 成云因子 × 高度因子 × Q；Q = 封盖因子<sup>0.35</sup> × 上空通透因子<sup>0.30</sup> × 风速因子<sup>0.15</sup> × 无降水因子<sup>0.20</sup>。这些权重未经实况校准，不是概率。</p>
-      <div class="score-mode-list">${Object.entries(d.models).map(([id, m]) => { const v = m.seaAtRise; return `<div><b>${esc(modelName(id))}</b><span>日出时刻指数 ${scoreText(v?.P)}${v?.P == null ? '' : '/100'}</span><small>${esc(diagnosticLabel(v))}</small></div>`; }).join('')}</div>
+      <div class="score-mode-list">${Object.entries(d.models).map(([id, m]) => { const v = m.seaAtBest; return `<div><b>${esc(modelName(id))}</b><span>${d.bestIdx == null ? '云海评分' : '最佳时刻指数'} ${scoreText(v?.P)}${v?.P == null ? '' : '/100'}</span><small>${esc(diagnosticLabel(v))}</small></div>`; }).join('')}</div>
     </details>
     <ul class="why">${reasons(d).map((x) => `<li>${x}</li>`).join('')}</ul>
     <div>
@@ -335,7 +336,7 @@ function renderDetail(d) {
         <div><span>体感</span>${r1(d.hike.feels.mean, '°C')}</div>
         <div><span>风速 / 阵风</span>${r0(d.hike.ws.mean)} / ${r0(d.hike.gust.max)} m/s</div>
         <div><span>零度层</span>${r0(d.hike.frz.mean, ' m')}</div>
-        <div><span>最佳云海时刻</span>${hm(S.res.hours[d.bestIdx]?.t)}</div>
+        <div><span>最佳云海时刻</span>${d.bestIdx == null ? '—' : hm(S.res.hours[d.bestIdx].t)}</div>
       </div>
       <ul class="alerts" style="margin-top:8px">${alerts.map((x) => `<li class="${ok ? 'ok' : ''}">${x}</li>`).join('')}</ul>
     </div>`;
@@ -346,13 +347,13 @@ const TYPE = { A: '层积云', B: '辐射雾', none: '—' };
 function renderModelTable(d) {
   const rows = S.res.models.map((id) => {
     const m = d.models[id];
-    const a = m.seaAtRise ?? {};
+    const a = m.seaAtBest ?? {};
     return `<tr><td><span class="dot" style="background:${modelColor(id)}"></span>${modelName(id)}</td>
       <td>${r0(m.sea, '/100')}</td><td>${r0(a.ztop, ' m')}</td><td>${TYPE[a.type] ?? '—'}</td><td>${r1(a.cap)}</td><td>${r0(a.rhObs, '%')}</td>
       <td>${r0(m.sun.Pvis, '/100')}</td><td>${r0(m.sun.glow)}</td><td>${r0(m.sun.canvas, '%')}</td><td>${r1(m.hike.T, '°')}</td><td>${r1(m.hike.ws)}</td></tr>`;
   }).join('');
   $('#model-table').innerHTML = `<table>
-    <thead><tr><th>模式</th><th>云海指数</th><th>云顶</th><th>类型</th><th>封盖 K/km</th><th>山顶 RH</th><th>日出遮云指数</th><th>朝霞</th><th>中高云</th><th>气温</th><th>风 m/s</th></tr></thead>
+    <thead><tr><th>模式</th><th>云海指数</th><th>云顶</th><th>类型</th><th>封盖 K/km</th><th>山顶 RH</th><th>日出可见条件指数</th><th>朝霞</th><th>中高云</th><th>气温</th><th>风 m/s</th></tr></thead>
     <tbody>${rows}<tr class="mean"><td>集合平均</td><td>${r0(d.sea.mean, '/100')}</td><td>${r0(d.ztop.mean, ' m')}</td><td>${TYPE[d.type]}</td><td>${r1(d.cap.mean)}</td><td>—</td>
       <td>${r0(d.vis.mean, '/100')}</td><td>${r0(d.glow.mean)}</td><td>—</td><td>${r1(d.hike.T.mean, '°')}</td><td>${r1(d.hike.ws.mean)}</td></tr></tbody></table>`;
 }
@@ -418,7 +419,7 @@ function renderLiveDiagnostic(h, a) {
       : delta < 150 ? '云顶贴近观测点'
         : '可俯瞰诊断云层';
   const diagnoses = Object.values(h.models).map((m) => m.diagnosis);
-  const missing = diagnoses.filter((v) => v === 'missing-input').length;
+  const missing = diagnoses.filter((v) => v === 'missing-input' || v === 'insufficient-profile').length;
   const unresolved = diagnoses.filter((v) => v === 'unresolved-cloud-top').length;
   const quality = nScore === 0 ? (unresolved ? '云顶边界无法判定' : '关键气象资料不足')
     : nScore < nTotal ? `部分模式无法评分（云顶未解 ${unresolved} · 缺测 ${missing}）`
@@ -702,7 +703,7 @@ function renderObs() {
   };
   $('#verify').innerHTML = `<div class="stats">
     ${card('云海条件指数', O.verify(list, 'sea', (o) => (o.sea >= 1 ? 1 : 0)))}
-    ${card('日出遮云指数', O.verify(list, 'vis', (o) => (o.sun >= 1 ? 1 : 0)))}</div>`;
+    ${card('日出可见条件指数', O.verify(list, 'vis', (o) => (o.sun >= 1 ? 1 : 0)))}</div>`;
 }
 
 function bindObs() {
@@ -759,7 +760,7 @@ async function share() {
   const s = S.site;
   const d = S.res?.days[S.day];
   const title = `云海·日出预报｜${s?.name ?? ''}`;
-  const text = d ? `${s.name} ${d.key} 日出 ${hm(d.rise.time)}：云海条件指数 ${r0(d.sea.mean, '/100')}、日出遮云指数 ${r0(d.vis.mean, '/100')}、朝霞指数 ${r0(d.glow.mean, '/100')}（未经概率校准）` : title;
+  const text = d ? `${s.name} ${d.key} 日出 ${hm(d.rise.time)}：云海条件指数 ${r0(d.sea.mean, '/100')}、日出可见条件指数 ${r0(d.vis.mean, '/100')}、朝霞指数 ${r0(d.glow.mean, '/100')}（未经概率校准）` : title;
   const url = /^https?:/.test(location.protocol) ? location.href : null;
   try {
     if (navigator.share) { await navigator.share(url ? { title, text, url } : { title, text }); return; }

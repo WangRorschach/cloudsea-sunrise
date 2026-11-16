@@ -1,6 +1,6 @@
 // Regression tests for missing values, uncertain cloud tops and score semantics.
 import assert from 'node:assert/strict';
-import { analyzeCloudSea, analyzeSunrise, potentialTemp, dewpoint, stats } from '../js/model.js';
+import { analyzeCloudSea, analyzeSunrise, potentialTemp, dewpoint, stats, runForecast } from '../js/model.js';
 
 function profile() {
   return [
@@ -65,4 +65,40 @@ assert.equal(top.diagnosis, 'unresolved-cloud-top');
 assert.match(top.diagnosisDetails, /上界/);
 assert.equal(good.diagnosis, 'resolved-cloud');
 assert.equal(analyzeCloudSea([], ctx).diagnosis, 'insufficient-profile');
+// Stagger the model peaks to verify the daily score uses a shared time.
+{
+  const layers = profile().map((layer, i) => ({ ...layer, p: [975, 950, 900, 850, 800, 750][i] }));
+  const incomplete = analyzeCloudSea(layers.slice(-2), ctx);
+  assert.equal(incomplete.P, null);
+  assert.equal(incomplete.diagnosis, 'insufficient-profile');
+
+  const offset = 28800;
+  const localTimes = Array.from({ length: 24 }, (_, i) =>
+    `2026-11-21T${String(i).padStart(2, '0')}:00`);
+  const times = localTimes.map((time) => Date.parse(time + '+08:00'));
+  const site = { lat: 27.457, lon: 114.168, zObs: 1800, zValley: 300 };
+  const series = (fn) => localTimes.map((_, i) => fn(i));
+  function model(id, peak, missing = false) {
+    const surf = { cm: series(() => 5), ch: series(() => 10), precip: series(() => missing ? null : 0) };
+    const levels = Object.fromEntries(layers.map((layer) => [layer.p, {
+      z: series(() => layer.z), T: series(() => layer.T), ws: series(() => layer.ws),
+      RH: series((i) => i === peak ? layer.RH : 35),
+      cc: series((i) => i === peak ? layer.cc : 0),
+    }]));
+    return { id, available: true, surf, levels };
+  }
+  const run = (models) => runForecast({ fc: { models, localTimes, times, offset }, site });
+  const win = run([model('A', 0)]).days[0].win;
+  const staggered = run([model('A', win[0]), model('B', win[1])]);
+  const day = staggered.days[0];
+  assert.equal(day.sea.mean, staggered.hours[day.bestIdx].P.mean);
+  assert.ok(day.sea.mean > 40 && day.sea.mean < 50);
+  assert.equal(day.sea.min, 0);
+  assert.equal(day.sea.n, 2);
+  const partial = run([model('A', win[0]), model('B', win[1], true)]).days[0];
+  assert.equal(partial.sea.n, 1);
+  const missing = run([model('A', win[0], true)]).days[0];
+  assert.equal(missing.bestIdx, null);
+  assert.equal(missing.sea.mean, null);
+}
 console.log('Forecast integrity regression tests passed');
