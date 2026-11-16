@@ -28,8 +28,11 @@ assert.equal(missingPrecip.P, null, 'missing rain cannot be silently interpreted
 const missingMidCloud = analyzeCloudSea(profile(), { ...ctx, cm: null });
 assert.equal(missingMidCloud.P, null, 'missing mid cloud cannot be silently interpreted as clear sky');
 const uncertain = profile().map((l) => ({ ...l }));
-uncertain[3].RH = 95;
-uncertain[3].Td = dewpoint(uncertain[3].T, 95);
+for (let i = 3; i < uncertain.length; i++) {
+  uncertain[i].RH = 95;
+  uncertain[i].Td = dewpoint(uncertain[i].T, 95);
+}
+uncertain[0].ws = 20; // suppress separate radiative-fog branch in this test
 const top = analyzeCloudSea(uncertain, ctx);
 assert.equal(top.P, null, 'unbounded cloud top cannot create a precise lookout score');
 assert.ok(top.topEstimated);
