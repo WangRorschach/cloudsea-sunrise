@@ -453,3 +453,33 @@ body.noscroll { overflow: hidden; }
   .cs .cs-h small, .chart-head small { display: block; }
   .chart-box { height: 230px; }
 }
+
+/* Forecast integrity update: current-hour diagnosis directly over the original 3D map. */
+.live-diagnostic {
+  position: absolute; top: 12px; right: 62px; z-index: 14; width: min(285px, 39%);
+  padding: 12px 14px; background: rgba(10, 19, 34, .92); border: 1px solid rgba(164, 190, 218, .24);
+  border-radius: 12px; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
+  box-shadow: 0 12px 30px rgba(0,0,0,.2); pointer-events: none;
+}
+.live-diagnostic .ld-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.live-diagnostic .ld-head span { font-size: 11px; color: #a2b3ce; }
+.live-diagnostic .ld-main { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 10px; }
+.live-diagnostic .ld-main small { display: block; color: #b8c7d9; font-size: 11px; margin-bottom: 5px; }
+.live-diagnostic .ld-main strong { display: block; color: #f8c27d; font-size: 28px; font-weight: 680; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.live-diagnostic .ld-main strong em { font-size: 11px; color: #a6b7d0; font-style: normal; margin-left: 3px; }
+.live-diagnostic .ld-main .ld-top { font-size: 20px; color: #f0f5fb; }
+.live-diagnostic .ld-top small { display: inline; }
+.live-diagnostic .ld-status { color: #dfe9f7; padding: 6px 9px; background: rgba(148, 173, 211, .11); border-radius: 6px; font-size: 12px; }
+.live-diagnostic .ld-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; font-size: 10px; color: #9fb2cf; }
+.live-diagnostic p { margin: 8px 0 0; font-size: 10px; line-height: 1.5; color: #8498b6; }
+@media (max-width: 1100px) {
+  .live-diagnostic { top: 66px; right: 12px; width: min(290px, 48%); }
+}
+@media (max-width: 640px) {
+  .live-diagnostic { top: 60px; left: auto; right: 8px; width: min(218px, 56%); padding: 9px; }
+  .live-diagnostic .ld-main { gap: 5px; margin: 8px 0; }
+  .live-diagnostic .ld-main strong { font-size: 21px; }
+  .live-diagnostic .ld-main .ld-top { font-size: 16px; }
+  .live-diagnostic p { display: none; }
+  .live-diagnostic .ld-meta { flex-wrap: wrap; }
+}
