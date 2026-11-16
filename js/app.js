@@ -413,7 +413,7 @@ function renderCsNow() {
   const thick = has && a.zbase.mean != null ? a.ztop.mean - a.zbase.mean : null;
   $('#cs-now').innerHTML = `<h5>${L.md} ${a.local.slice(11, 16)} · 太阳高度 ${r0(a.sunEl, '°')}</h5>
     <div class="big">
-      <span><b>${r0(p)}</b><small>% 云海概率 · ${lv.txt}</small></span>
+      <span><b>${r0(p)}</b><small>% 云海条件指数 · ${lv.txt}</small></span>
       <span><b>${has ? r0(a.ztop.mean) : '—'}</b><small>m 云顶${has ? ` · ${r0(a.ztop.min)}–${r0(a.ztop.max)}` : ''}</small></span>
       <span><b>${cov == null ? '—' : r0(cov * 100)}</b><small>% 周边 10 km 被云覆盖${S.grid ? '' : '（计算中）'}</small></span>
     </div>
