@@ -17,7 +17,7 @@ const LIMIT_TXT = {
   wind: '观测高度风大，云面易被吹散',
   precip: '有降水',
 };
-const SEA_ON = 20; // 集合指数 ≥20% 记为“有云海”时段
+const SEA_ON = 20; // 未校准条件指数 >=20 的时段（不是发生概率）
 
 // 某一小时的多模式汇总
 export function hourAgg(res, fc, i) {
@@ -76,7 +76,7 @@ export function dayEpisodes(res, fc, key) {
 
 const hh = (local) => local.slice(11, 13);
 
-// 热力图色阶：深夜蓝 → 灰蓝 → 云白（≥70% 略带暖色，表示“很可能”）
+// 热力图色阶：深夜蓝 → 灰蓝 → 云白（≥70/100 略带暖色，仅表示指数较高）
 const STOPS = [[0, [24, 35, 58]], [10, [38, 55, 86]], [25, [70, 98, 140]], [45, [140, 168, 205]], [65, [222, 232, 246]], [85, [255, 246, 222]]];
 function heatColor(p, night) {
   let k = 1;
@@ -96,21 +96,21 @@ export function summaryHtml(res, fc, site, day, hm) {
   if (!eps.length) {
     const pk = day.idx.reduce((a, b) => ((res.hours[b].P.mean ?? 0) > (res.hours[a].P.mean ?? 0) ? b : a), day.idx[0]);
     const a = hourAgg(res, fc, pk);
-    out.push(`<p class="cs-lead none">当天<b>没有明显的云海时段</b>（全天集合指数均低于 ${SEA_ON}%，最高 ${r0(a.P.mean, '%')}，出现在 ${hh(a.local)} 时）。</p>`);
+    out.push(`<p class="cs-lead none">当天<b>没有明显的云海时段</b>（全天集合条件指数均低于 ${SEA_ON}/100，最高 ${r0(a.P.mean, '/100')}，出现在 ${hh(a.local)} 时）。</p>`);
     if (a.limit) out.push(`<p>主要限制因子：<b>${a.limit.txt}</b>（因子值 ${a.limit.v.toFixed(2)}，1 为最有利）。</p>`);
   } else {
-    out.push(`<p class="cs-lead">当天有 <b>${eps.length}</b> 个云海时段：</p><ol class="cs-eps">${eps.map((e) => {
+    out.push(`<p class="cs-lead">当天有 <b>${eps.length}</b> 个云海条件有利时段：</p><ol class="cs-eps">${eps.map((e) => {
       const H = res.hours;
       const pk = e.peakAgg;
       const rel = e.ztop.mean != null ? site.zObs - e.ztop.mean : null;
       const relTxt = rel == null ? '' : rel >= 0 ? `，比观测点<b>低约 ${r0(rel)} m</b>（可俯瞰）` : `，<b>高于观测点 ${r0(-rel)} m</b>（会身处云中）`;
-      const models = Object.entries(pk.perModel).map(([id, p]) => `${mName(id)} ${r0(p)}%`).join('、');
+      const models = Object.entries(pk.perModel).map(([id, p]) => `${mName(id)} ${r0(p)}/100`).join('、');
       return `<li><b>${hh(H[e.start].local)}:00 – ${hh(H[e.end].local)}:59</b> · ${TYPE_TXT[e.type]}<br>
         云顶 <b>${r0(e.ztop.min)}–${r0(e.ztop.max)} m</b>${e.zbase.mean != null ? `，云底约 ${r0(e.zbase.mean)} m` : ''}${relTxt}。<br>
-        峰值 <b>${hh(pk.local)} 时 ${r0(pk.P.mean, '%')}</b>（${models}）${e.clearAt ? `；预计 ${hm(e.clearAt)} 前后减弱` : ''}。</li>`;
+        峰值 <b>${hh(pk.local)} 时 ${r0(pk.P.mean, '/100')}</b>（${models}）${e.clearAt ? `；预计 ${hm(e.clearAt)} 前后减弱` : ''}。</li>`;
     }).join('')}</ol>`);
   }
-  out.push(`<p>日出 ${hm(day.rise.time)} 时：云海条件指数 <b>${r0(riseAgg.P.mean, '%')}</b>（模式范围 ${r0(riseAgg.P.min)}–${r0(riseAgg.P.max)}%）${riseAgg.ztop.mean != null && (riseAgg.P.mean ?? 0) >= 8 ? `，云顶 ${r0(riseAgg.ztop.mean)} m` : ''}；观测高度相对湿度 ${r0(riseAgg.rh.mean, '%')}，低云量 ${r0(riseAgg.cl.mean, '%')}${riseAgg.limit && (riseAgg.P.mean ?? 0) < 40 ? `；最主要的限制是“${riseAgg.limit.txt}”` : ''}。</p>`);
+  out.push(`<p>日出 ${hm(day.rise.time)} 时：云海条件指数 <b>${r0(riseAgg.P.mean, '/100')}</b>（模式范围 ${r0(riseAgg.P.min)}–${r0(riseAgg.P.max)}/100）${riseAgg.ztop.mean != null && (riseAgg.P.mean ?? 0) >= 8 ? `，云顶 ${r0(riseAgg.ztop.mean)} m` : ''}；观测高度相对湿度 ${r0(riseAgg.rh.mean, '%')}，低云量 ${r0(riseAgg.cl.mean, '%')}${riseAgg.limit && (riseAgg.P.mean ?? 0) < 40 ? `；最主要的限制是“${riseAgg.limit.txt}”` : ''}。</p>`);
   return out.join('');
 }
 
@@ -166,7 +166,7 @@ export function hourTableHtml(res, fc, site, day, selected) {
       <td class="lim">${p >= 60 ? '<span class="ok">条件理想</span>' : a.limit ? esc(a.limit.txt) : '—'}</td>
     </tr>`);
   }
-  return `<table class="cs-table"><thead><tr><th>时刻</th><th>太阳</th><th>云海条件指数 %</th><th>类型</th><th>云底–云顶 m</th><th>厚度 m</th><th>观测点相对云顶</th><th>低云量</th><th>山顶 RH</th><th>逆温 K/km</th><th>风 m/s</th><th>降水 mm</th><th>主要限制</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  return `<table class="cs-table"><thead><tr><th>时刻</th><th>太阳</th><th>云海条件指数 /100</th><th>类型</th><th>云底–云顶 m</th><th>厚度 m</th><th>观测点相对云顶</th><th>低云量</th><th>山顶 RH</th><th>逆温 K/km</th><th>风 m/s</th><th>降水 mm</th><th>主要限制</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
 }
 
 // 观测点周边地形网格（半径 10 km，用于估算云海覆盖面积与露出云面的山峰）
