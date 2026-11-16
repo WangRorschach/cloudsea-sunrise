@@ -32,7 +32,7 @@ export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
   const ds = [
     { label: '模式范围(上)', data: pts((h) => h.P.max), borderWidth: 0, pointRadius: 0, backgroundColor: 'rgba(130,180,255,0.18)', fill: '+1' },
     { label: '模式范围(下)', data: pts((h) => h.P.min), borderWidth: 0, pointRadius: 0, fill: false },
-    { label: '云海概率（集合平均）', data: pts((h) => h.P.mean), borderColor: '#e8f1ff', borderWidth: 2.2, pointRadius: 0, tension: 0.25 },
+    { label: '云海条件指数（集合平均）', data: pts((h) => h.P.mean), borderColor: '#e8f1ff', borderWidth: 2.2, pointRadius: 0, tension: 0.25 },
     ...res.models.map((m) => ({
       label: mName(m), data: pts((h) => h.models[m]?.P ?? null), borderColor: modelColor(m), borderWidth: 1, pointRadius: 0, borderDash: [3, 3], hidden: false, tension: 0.2,
     })),
@@ -49,7 +49,7 @@ export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
       interaction: { mode: 'nearest', axis: 'x', intersect: false },
       scales: {
         x: { type: 'linear', min: H[0]?.t, max: H[H.length - 1]?.t, ticks: { stepSize: 6 * 3600e3, callback: (v) => fmtTime(v, offset), maxRotation: 0, autoSkip: true } },
-        y: { min: 0, max: 100, title: { display: true, text: '云海概率 %' } },
+        y: { min: 0, max: 100, title: { display: true, text: '云海条件指数 %' } },
       },
       plugins: {
         legend: { labels: { boxWidth: 10, filter: (it) => !it.text.startsWith('模式范围') } },
@@ -148,7 +148,7 @@ export function drawHorizon(day, site, terrain, modelId) {
   });
 }
 
-// 云层高度走势：云底–云顶（集合平均）、云顶模式范围、观测点与谷底海拔、云海概率
+// 云层高度走势：云底–云顶（集合平均）、云顶模式范围、观测点与谷底海拔、云海条件指数
 export function drawCloudLayer(res, site, offset, { selected, onSelect, nowMs, agg }) {
   const H = res.hours.map((h, i) => ({ h, i })).filter(({ h }) => h.t >= nowMs - 30 * 3600e3);
   const on = ({ h }) => (h.P.mean ?? 0) >= 8 && h.ztop.mean != null;
@@ -161,7 +161,7 @@ export function drawCloudLayer(res, site, offset, { selected, onSelect, nowMs, a
     { label: '云底', data: pts(({ i }) => agg(i).zbase.mean), borderColor: 'rgba(200,210,230,0.6)', borderWidth: 1, borderDash: [3, 3], pointRadius: 0, spanGaps: false, tension: 0.25 },
     { label: `观测点 ${Math.round(site.zObs)} m`, data: flat(site.zObs), borderColor: '#ffd84d', borderWidth: 1.6, pointRadius: 0 },
     { label: `谷底 ${Math.round(site.zValley)} m`, data: flat(site.zValley), borderColor: '#9a7b5b', borderDash: [5, 4], borderWidth: 1.2, pointRadius: 0 },
-    { label: '云海概率', type: 'bar', yAxisID: 'yP', data: H.map(({ h }) => ({ x: h.t, y: h.P.mean ?? 0 })), backgroundColor: 'rgba(127,178,229,0.28)', barPercentage: 1, categoryPercentage: 1, barThickness: 'flex' },
+    { label: '云海条件指数', type: 'bar', yAxisID: 'yP', data: H.map(({ h }) => ({ x: h.t, y: h.P.mean ?? 0 })), backgroundColor: 'rgba(127,178,229,0.28)', barPercentage: 1, categoryPercentage: 1, barThickness: 'flex' },
   ];
   const sel = selected != null ? res.hours[selected]?.t : null;
   const tops = H.filter(on).map(({ h }) => h.ztop.max);
@@ -176,7 +176,7 @@ export function drawCloudLayer(res, site, offset, { selected, onSelect, nowMs, a
       scales: {
         x: { type: 'linear', min: H[0]?.h.t, max: H[H.length - 1]?.h.t, ticks: { stepSize: 6 * 3600e3, callback: (v) => fmtTime(v, offset), maxRotation: 0, autoSkip: true } },
         y: { min: Math.max(0, Math.floor((site.zValley - 250) / 100) * 100), max: Math.ceil(ymax / 100) * 100, title: { display: true, text: '海拔 m' } },
-        yP: { position: 'right', min: 0, max: 100, grid: { display: false }, title: { display: true, text: '云海概率 %' } },
+        yP: { position: 'right', min: 0, max: 100, grid: { display: false }, title: { display: true, text: '云海条件指数 %' } },
       },
       plugins: {
         legend: { labels: { boxWidth: 10, filter: (it) => !it.text.startsWith('云顶范围') } },
