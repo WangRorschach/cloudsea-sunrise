@@ -15,6 +15,7 @@ export function snapshotForecast(site, days) {
     if (d.past || d.sea.mean == null) continue;
     const k = `${siteKey(site)}|${d.key}`;
     const lead = (d.rise.time - now) / 3600e3;
+    if (lead < 12 || lead > 36) continue; // Only evaluate the fixed 24h-lead band.
     const prev = snap[k];
     const better = !prev || (Math.abs(lead - 24) < Math.abs(prev.lead - 24));
     if (better) snap[k] = { lead, issued: now, sea: d.sea.mean, vis: d.vis.mean, glow: d.glow.mean, ztop: d.ztop.mean, name: site.name };
@@ -54,16 +55,16 @@ export function verify(obs, field, observedFn) {
     .map((o) => ({ p: o.forecast[field] / 100, y: observedFn(o) }));
   if (!pairs.length) return null;
   const n = pairs.length;
-  const bs = pairs.reduce((a, q) => a + (q.p - q.y) ** 2, 0) / n;
+  // Forecast values are uncalibrated condition indices, not event probabilities.
+  // Brier scores would be misleading until an independently calibrated mapping exists.
   const base = pairs.reduce((a, q) => a + q.y, 0) / n;
-  const bsRef = base * (1 - base);
   const t = { a: 0, b: 0, c: 0, d: 0 };
   for (const q of pairs) {
     const f = q.p >= 0.5;
     if (f && q.y) t.a++; else if (f && !q.y) t.b++; else if (!f && q.y) t.c++; else t.d++;
   }
   return {
-    n, bs, bss: bsRef > 0 ? 1 - bs / bsRef : null, base,
+    n, bs: null, bss: null, base, uncalibrated: true,
     pod: t.a + t.c ? t.a / (t.a + t.c) : null,
     far: t.a + t.b ? t.b / (t.a + t.b) : null,
     csi: t.a + t.b + t.c ? t.a / (t.a + t.b + t.c) : null,
