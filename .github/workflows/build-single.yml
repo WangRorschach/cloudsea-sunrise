@@ -1,0 +1,38 @@
+name: Keep original website and single-file HTML in sync
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'css/**'
+      - 'js/**'
+      - 'docs.html'
+      - 'data/pois.json'
+      - 'tools/build-single.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-single:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate single-file mirror of the original site
+        run: node tools/build-single.mjs
+      - name: Commit synchronized distribution artifact
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add dist/cloudsea-sunrise.html
+          if ! git diff --cached --quiet; then
+            git commit -m "build: sync original cloudsea website single-file HTML"
+            git push
+          fi
