@@ -216,7 +216,16 @@ export function analyzeCloudSea(prof, c) {
     : Math.exp(0.35 * lg(Fcap) + 0.3 * lg(Fdry) + 0.15 * lg(Fwind) + 0.2 * lg(Fprecip));
   r.f = { cloud: Fcloud, height: Fheight, cap: Fcap, dry: Fdry, wind: Fwind, precip: Fprecip, Q };
   // P is an UNCALIBRATED suitability score (0..100), never a verified probability.
-  r.P = Q == null || r.ztop == null ? null : 100 * Fcloud * Fheight * Q;
+  // Distinguish a genuinely unfavorable (no diagnosed cloud) hour from missing
+  // data or a cloud layer whose upper boundary cannot be resolved.
+  // No saturated levels + negligible valley-fog signal -> score 0, not missing.
+  const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08;
+  r.P = Q == null ? null
+    : r.ztop != null ? 100 * Fcloud * Fheight * Q
+      : noCloudEvidence ? 0 : null;
+  r.diagnosis = Q == null ? 'missing-input'
+    : r.ztop != null ? 'resolved-cloud'
+      : noCloudEvidence ? 'unfavorable' : 'unresolved-cloud-top';
   return r;
 }
 
