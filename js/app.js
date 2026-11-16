@@ -398,12 +398,17 @@ function renderLiveDiagnostic(h, a) {
   const nTop = h.ztop.n;
   const top = h.ztop.mean;
   const delta = top == null ? null : S.site.zObs - top;
-  const sky = top == null ? '云顶缺测'
+  const sky = top == null ? (h.P.mean === 0 ? '当前条件不利，未诊断出稳定低云顶' : '云顶数据不足或无法判定')
     : delta < 0 ? '观测点可能处于云中'
       : delta < 150 ? '云顶贴近观测点'
         : '可俯瞰诊断云层';
-  const quality = nScore === 0 ? '关键气象资料不足' : nScore < nTotal ? '部分模式资料不足' : '关键评分资料齐全';
-  const cloudText = nTop === 0 ? '无法判断' : `${r0(top)} m <small>(${nTop}/${nTotal} 模式)</small>`;
+  const diagnoses = Object.values(h.models).map((m) => m.diagnosis);
+  const missing = diagnoses.filter((v) => v === 'missing-input').length;
+  const unresolved = diagnoses.filter((v) => v === 'unresolved-cloud-top').length;
+  const quality = nScore === 0 ? (unresolved ? '云顶边界无法判定' : '关键气象资料不足')
+    : nScore < nTotal ? `部分模式无法评分（云顶未解 ${unresolved} · 缺测 ${missing}）`
+      : '有效模式已完成评分';
+  const cloudText = nTop === 0 ? (h.P.mean === 0 ? '未检出' : '无法判断') : `${r0(top)} m <small>(${nTop}/${nTotal} 模式)</small>`;
   el.innerHTML = `<div class="ld-head"><b>逐小时诊断</b><span>${h.local.slice(5, 16).replace('T', ' ')}</span></div>
     <div class="ld-main"><div><small>云海条件指数（非概率）</small><strong>${r0(h.P.mean)}<em>/100</em></strong></div>
     <div><small>云顶估计</small><strong class="ld-top">${cloudText}</strong></div></div>
@@ -531,18 +536,28 @@ function bindSearch() {
     if (ll) { render([{ name: `${ll[1]}, ${ll[2]}`, lat: +ll[1], lon: +ll[2], kind: '坐标', group: 'misc', src: '坐标' }]); return; }
     const local = await Q.searchLocal(v);
     if (ac.signal.aborted) return;
-    const lists = [local, [], [], []];
+    const lists = [local, [], [], [], []];
     const c = M.getMap()?.getCenter();
     const center = c ? { lat: c.lat, lon: c.lng } : S.site;
     const ranked = () => Q.rank(Q.mergeResults(lists), v, center).slice(0, 20);
     render(ranked(), true);
+    let failures = 0;
     const jobs = [
       Q.searchOverpass(v, center, ac.signal).then((r) => { lists[1] = r; }),
       Q.searchNominatim(v, ac.signal).then((r) => { lists[2] = r; }),
       Q.searchPlaces(v).then((r) => { lists[3] = r; }),
-    ].map((p) => p.catch(() => {}).then(() => { if (!ac.signal.aborted) render(ranked(), true); }));
+      Q.searchPhoton(v, ac.signal).then((r) => { lists[4] = r; }),
+    ].map((p) => p.catch((err) => {
+      failures++;
+      console.warn('搜索服务暂不可用', err);
+    }).then(() => { if (!ac.signal.aborted) render(ranked(), true); }));
     await Promise.all(jobs);
-    if (!ac.signal.aborted) render(ranked(), false);
+    if (!ac.signal.aborted) {
+      render(ranked(), false);
+      if (!ranked().length && failures) {
+        box.innerHTML = '<li class="empty">在线地点服务暂不可用或没有匹配结果。可换短关键词、选择预置地点，或输入经纬度定位。</li>';
+      }
+    }
   };
   q.addEventListener('input', () => {
     clearTimeout(qTimer);
