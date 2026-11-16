@@ -23,6 +23,14 @@ assert.ok(good.P > 0 && good.P <= 100);
 const inCloud = analyzeCloudSea(profile(), { ...ctx, zObs: 950 });
 assert.ok(inCloud.ztop != null, 'cloud must exist even when viewpoint is inside it');
 assert.ok(inCloud.P < good.P, 'lookout suitability must be lower inside clouds');
+// Complete data with no saturated layer means an unfavorable score 0,
+// not "missing", which previously left many full days blank.
+const dryProfile = profile().map((l) => ({
+  ...l, RH: 35, cc: 0, Td: dewpoint(l.T, 35),
+}));
+const unfavorable = analyzeCloudSea(dryProfile, { ...ctx, sunElev: 20 });
+assert.equal(unfavorable.P, 0, 'unfavorable clear/dry conditions must show score 0');
+assert.equal(unfavorable.diagnosis, 'unfavorable');
 const missingPrecip = analyzeCloudSea(profile(), { ...ctx, precip: null });
 assert.equal(missingPrecip.P, null, 'missing rain cannot be silently interpreted as dry');
 const missingMidCloud = analyzeCloudSea(profile(), { ...ctx, cm: null });
