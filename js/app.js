@@ -161,10 +161,10 @@ function renderDays() {
     return `<button class="day${d.past ? ' past' : ''}" data-k="${k}" aria-pressed="${k === S.day}">
       <div class="d">${rd ?? L.w}<small>${L.md}</small></div>
       <div class="sea">
-        <div class="lbl"><span>云海 · 日出 ${hm(d.rise.time)}</span><b>${r0(d.sea.mean, '%')}</b></div>
-        <div class="meter" title="模式范围 ${r0(mn)}–${r0(mx)}%"><span class="rng" style="left:${mn}%;width:${mx - mn}%"></span><span class="val" style="width:${d.sea.mean ?? 0}%"></span></div>
+        <div class="lbl"><span>云海 · 日出 ${hm(d.rise.time)}</span><b>${r0(d.sea.mean, '/100')}</b></div>
+        <div class="meter" title="条件指数模式范围 ${r0(mn)}–${r0(mx)} /100"><span class="rng" style="left:${mn}%;width:${mx - mn}%"></span><span class="val" style="width:${d.sea.mean ?? 0}%"></span></div>
       </div>
-      <div class="m">日出<b class="sun">${r0(d.vis.mean, '%')}</b></div>
+      <div class="m">日出<b class="sun">${r0(d.vis.mean, '/100')}</b></div>
       <div class="m">朝霞<b>${r0(d.glow.mean)}</b></div>
     </button>`;
   }).join('');
@@ -245,7 +245,7 @@ function reasons(d) {
   const vis = d.vis.mean;
   if (vis != null) {
     if (S.horizonOk === false) out.push('远方云量数据获取失败，日出遮云条件暂不可判定。');
-    else if (vis >= 60) out.push(`日出方向 300 km 光路上云层稀薄，<b>日出大概率可见</b>。`);
+    else if (vis >= 60) out.push(`日出方向 300 km 光路上云层稀薄，<b>日出观测条件较有利（未经校准）</b>。`);
     else if (vis >= 30) out.push('日出方向光路上有部分云层，太阳可能从云缝中露出。');
     else out.push('日出方向光路上云层较厚或身处云中，<b>日出可能被遮挡</b>。');
   }
@@ -333,11 +333,11 @@ function renderModelTable(d) {
     const m = d.models[id];
     const a = m.seaAtRise ?? {};
     return `<tr><td><span class="dot" style="background:${modelColor(id)}"></span>${modelName(id)}</td>
-      <td>${r0(m.sea, '%')}</td><td>${r0(a.ztop, ' m')}</td><td>${TYPE[a.type] ?? '—'}</td><td>${r1(a.cap)}</td><td>${r0(a.rhObs, '%')}</td>
-      <td>${r0(m.sun.Pvis, '%')}</td><td>${r0(m.sun.glow)}</td><td>${r0(m.sun.canvas, '%')}</td><td>${r1(m.hike.T, '°')}</td><td>${r1(m.hike.ws)}</td></tr>`;
+      <td>${r0(m.sea, '/100')}</td><td>${r0(a.ztop, ' m')}</td><td>${TYPE[a.type] ?? '—'}</td><td>${r1(a.cap)}</td><td>${r0(a.rhObs, '%')}</td>
+      <td>${r0(m.sun.Pvis, '/100')}</td><td>${r0(m.sun.glow)}</td><td>${r0(m.sun.canvas, '%')}</td><td>${r1(m.hike.T, '°')}</td><td>${r1(m.hike.ws)}</td></tr>`;
   }).join('');
   $('#model-table').innerHTML = `<table>
-    <thead><tr><th>模式</th><th>云海</th><th>云顶</th><th>类型</th><th>封盖 K/km</th><th>山顶 RH</th><th>日出可见</th><th>朝霞</th><th>中高云</th><th>气温</th><th>风 m/s</th></tr></thead>
+    <thead><tr><th>模式</th><th>云海指数</th><th>云顶</th><th>类型</th><th>封盖 K/km</th><th>山顶 RH</th><th>日出遮云指数</th><th>朝霞</th><th>中高云</th><th>气温</th><th>风 m/s</th></tr></thead>
     <tbody>${rows}<tr class="mean"><td>集合平均</td><td>${r0(d.sea.mean, '%')}</td><td>${r0(d.ztop.mean, ' m')}</td><td>${TYPE[d.type]}</td><td>${r1(d.cap.mean)}</td><td>—</td>
       <td>${r0(d.vis.mean, '%')}</td><td>${r0(d.glow.mean)}</td><td>—</td><td>${r1(d.hike.T.mean, '°')}</td><td>${r1(d.hike.ws.mean)}</td></tr></tbody></table>`;
 }
