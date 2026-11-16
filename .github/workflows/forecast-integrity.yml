@@ -3,6 +3,7 @@ name: Forecast integrity checks
 on:
   push:
     branches:
+      - main
       - fix/forecast-integrity-20261116
   pull_request:
   workflow_dispatch:
