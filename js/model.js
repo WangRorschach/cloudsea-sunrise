@@ -113,7 +113,7 @@ export function analyzeCloudSea(prof, c) {
     P: null, ztop: null, zbase: null, ztopRange: null, topEstimated: false, type: 'none', margin: null,
     cap: null, invDT: null, jump: null, rhObs: null, wsObs: null, f: {}, notes: [],
   };
-  if (prof.length < 2) return r;
+  if (prof.length < 2) { r.diagnosis = 'insufficient-profile'; r.diagnosisDetails = '有效气压层少于两层，无法建立低层垂直廓线'; return r; }
   const lay = layersOf(prof);
 
   // A 型：层积云 / 低层云顶（饱和层）
@@ -220,12 +220,25 @@ export function analyzeCloudSea(prof, c) {
   // data or a cloud layer whose upper boundary cannot be resolved.
   // No saturated levels + negligible valley-fog signal -> score 0, not missing.
   const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08;
+  const missingFields = [
+    ['cm', c.cm], ['ch', c.ch], ['precip', c.precip], ['obsRH', r.rhObs], ['obsWind', r.wsObs],
+  ].filter(([, v]) => v == null).map(([k]) => k);
   r.P = Q == null ? null
     : r.ztop != null ? 100 * Fcloud * Fheight * Q
       : noCloudEvidence ? 0 : null;
   r.diagnosis = Q == null ? 'missing-input'
     : r.ztop != null ? 'resolved-cloud'
       : noCloudEvidence ? 'unfavorable' : 'unresolved-cloud-top';
+  r.missingFields = missingFields;
+  r.diagnosisDetails = r.diagnosis === 'missing-input'
+    ? `关键输入不完整：${missingFields.join(', ') || '评分因子不可计算'}`
+    : r.diagnosis === 'unresolved-cloud-top'
+      ? '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分'
+      : r.diagnosis === 'unfavorable'
+        ? '有效廓线未检出足够饱和低云，谷雾诊断也未达到阈值'
+        : r.P === 0 && r.margin != null && r.margin <= -200
+          ? '诊断云顶高于观测点至少 200 m：此处无法俯瞰云海，条件评分为零'
+          : '已由成云、云顶高差、封盖、上空通透、风和降水因子计算条件评分';
   return r;
 }
 
