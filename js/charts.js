@@ -27,6 +27,13 @@ const fmtTime = (t, off) => {
 };
 
 export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
+  // A time cursor change must not destroy and recreate the entire Chart.js canvas.
+  const existing = charts['chart-timeline'];
+  if (existing?.$forecast === res) {
+    existing.$selectedTs = selected == null ? null : res.hours[selected]?.t;
+    existing.draw();
+    return;
+  }
   const H = res.hours.filter((h) => h.t >= nowMs - 30 * 3600e3);
   const pts = (fn) => H.map((h) => ({ x: h.t, y: fn(h) }));
   const ds = [
@@ -41,7 +48,7 @@ export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
     },
   ];
   const sel = selected != null ? res.hours[selected]?.t : null;
-  make('chart-timeline', {
+  const timelineChart = make('chart-timeline', {
     type: 'line',
     data: { datasets: ds },
     options: {
@@ -65,8 +72,8 @@ export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
     plugins: [{
       id: 'cursor',
       afterDraw(c) {
-        if (sel == null) return;
-        const x = c.scales.x.getPixelForValue(sel);
+        if (c.$selectedTs == null) return;
+        const x = c.scales.x.getPixelForValue(c.$selectedTs);
         const { top, bottom } = c.chartArea;
         c.ctx.save();
         c.ctx.strokeStyle = '#ffd84d'; c.ctx.lineWidth = 1.5; c.ctx.setLineDash([4, 3]);
@@ -75,6 +82,9 @@ export function drawTimeline(res, offset, { selected, onSelect, nowMs }) {
       },
     }],
   });
+  timelineChart.$forecast = res;
+  timelineChart.$selectedTs = sel;
+  timelineChart.draw();
 }
 
 export function drawProfile(hour, site, modelId) {
