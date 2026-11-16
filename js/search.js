@@ -31,7 +31,9 @@ export async function loadPois() {
     }
   } catch (e) {
     console.warn('离线地点包加载失败', e);
-    poiCache = [];
+    // Keep retry possible after a temporary network/JSON failure.
+    poiCache = null;
+    return [];
   }
   return poiCache;
 }
@@ -64,7 +66,7 @@ export async function searchLocal(raw, limit = 60) {
   })).filter((s) => s._s);
   const hits = [];
   for (const p of pois) {
-    if (prefix && qNoRegion && norm(p.region) !== prefix) continue;
+    // Do not hard-exclude POIs from other regions: names and aliases vary.
     const s = score(p, q, qNoRegion);
     if (s) hits.push({ ...p, _s: s });
   }
@@ -116,6 +118,27 @@ export async function searchNominatim(raw, signal) {
   }).filter((p) => p.kind !== '道路');
 }
 
+// Worldwide OSM-backed fuzzy geocoder. Used independently of Nominatim
+// because many village/trail/guesthouse names are absent from city geocoders.
+export async function searchPhoton(raw, signal) {
+  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(raw)}&limit=20`;
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`Photon ${response.status}`);
+  const json = await response.json();
+  return (json.features ?? []).map((f) => {
+    const p = f.properties ?? {};
+    const [lon, lat] = f.geometry?.coordinates ?? [];
+    const name = p.name || p['name:zh'] || p.street || '';
+    return {
+      name, lat: Number(lat), lon: Number(lon), ele: null,
+      kind: p.osm_value === 'peak' ? '山峰' : p.osm_value === 'viewpoint' ? '观景台' : '地点',
+      group: p.osm_value === 'peak' ? 'peak' : p.osm_value === 'viewpoint' ? 'view' : 'place',
+      region: [p.city, p.county, p.state, p.country].filter(Boolean).join(' · '),
+      src: 'OSM Photon',
+    };
+  }).filter((p) => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon));
+}
+
 export async function searchPlaces(raw) {
   const r = await geocode(raw);
   return r.map((x) => ({ name: x.name, lat: x.lat, lon: x.lon, ele: x.elevation != null ? Math.round(x.elevation) : null, kind: '地名', group: 'place', region: x.admin, src: '地名库' }));
@@ -132,7 +155,9 @@ export function rank(list, raw, here) {
     let s = p.src === '预置' ? 120 : score({ ...p, region: p.region ?? '' }, q, qNoRegion);
     if (!s && p.src !== '坐标') {
       const n = norm(p.name);
-      if (n.length >= 2 && q.includes(n)) s = 40; else continue;
+      if (n.length >= 2 && q.includes(n)) s = 40;
+      else if ((p.src === '地名库' || p.src === 'OSM Photon') && p.name && norm(p.region ?? '').includes(q)) s = 25;
+      else continue;
     }
     const km = here ? Math.hypot((p.lat - here.lat) * 111, (p.lon - here.lon) * 111 * Math.cos(here.lat * Math.PI / 180)) : 0;
     out.push({ ...p, _r: s - 8 * Math.log10(1 + km) });
