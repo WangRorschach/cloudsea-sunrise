@@ -93,7 +93,9 @@ export function summaryHtml(res, fc, site, day, hm) {
   const eps = dayEpisodes(res, fc, day.key);
   const riseAgg = hourAgg(res, fc, day.riseIdx);
   const out = [];
-  if (!eps.length) {
+  if (!eps.length && !day.idx.some((i) => res.hours[i].P.mean != null)) {
+    out.push('<p class="cs-lead none">当天所有有效时段的云海条件指数均无法计算：可能是气压层资料缺失，或低云存在但云顶没有有效上界。无法计算并不等于没有云海。</p>');
+  } else if (!eps.length) {
     const pk = day.idx.reduce((a, b) => ((res.hours[b].P.mean ?? 0) > (res.hours[a].P.mean ?? 0) ? b : a), day.idx[0]);
     const a = hourAgg(res, fc, pk);
     out.push(`<p class="cs-lead none">当天<b>没有明显的云海时段</b>（全天集合条件指数均低于 ${SEA_ON}/100，最高 ${r0(a.P.mean, '/100')}，出现在 ${hh(a.local)} 时）。</p>`);
@@ -130,7 +132,7 @@ export function heatmapHtml(res, days, { selected, dayLabel, relDay }) {
       const p = h.P.mean;
       const zt = h.ztop.mean;
       const night = h.sunEl < -6;
-      const tip = `${L.md} ${k}时 · 云海条件指数 ${r0(p)}/100（${r0(h.P.min)}–${r0(h.P.max)}%）${zt != null && p >= 8 ? ` · 云顶 ${Math.round(zt)} m` : ''}`;
+      const tip = `${L.md} ${k}时 · 云海条件指数 ${r0(p)}/100（${r0(h.P.min)}–${r0(h.P.max)}/100）${zt != null && p >= 8 ? ` · 云顶 ${Math.round(zt)} m` : ''}`;
       return `<span class="hm-c${night ? ' night' : ''}${k === +riseH ? ' rise' : ''}${i === selected ? ' sel' : ''}" data-i="${i}" title="${tip}" style="background:${p == null ? 'rgba(110,120,145,.18)' : heatColor(p, night)};color:${p != null && p >= 45 ? '#0b1220' : '#dfe8f6'}">${p != null && p >= 15 ? Math.round(p) : ''}</span>`;
     }).join('');
     return `<div class="hm-row${d.past ? ' past' : ''}"><span class="hm-d">${relDay(d.key) ?? L.w}<small>${L.md}</small></span>${cells}</div>`;
@@ -163,7 +165,7 @@ export function hourTableHtml(res, fc, site, day, selected) {
       <td>${r1(a.cap.mean)}</td>
       <td>${r1(a.ws.mean)}</td>
       <td>${r1(a.precip.mean)}</td>
-      <td class="lim">${p >= 60 ? '<span class="ok">条件理想</span>' : a.limit ? esc(a.limit.txt) : '—'}</td>
+      <td class="lim">${p == null ? '无法计算' : p >= 60 ? '<span class="ok">条件较有利</span>' : a.limit ? esc(a.limit.txt) : '条件不利'}</td>
     </tr>`);
   }
   return `<table class="cs-table"><thead><tr><th>时刻</th><th>太阳</th><th>云海条件指数 /100</th><th>类型</th><th>云底–云顶 m</th><th>厚度 m</th><th>观测点相对云顶</th><th>低云量</th><th>山顶 RH</th><th>逆温 K/km</th><th>风 m/s</th><th>降水 mm</th><th>主要限制</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
