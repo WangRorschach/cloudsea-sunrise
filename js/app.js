@@ -1,6 +1,6 @@
 // 页面控制：加载流程、面板渲染、地图与图表联动、观测记录
 /* global maplibregl */
-import { MODELS, runForecast } from './model.js?v=20261116-r6';
+import { MODELS, runForecast } from './model.js?v=20261118-r7';
 import { findRise } from './sun.js';
 import {
   fetchSiteTerrain, fetchForecast, fetchHorizon, fetchAirQuality, fetchTerrainProfile,
