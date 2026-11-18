@@ -15,7 +15,7 @@ function profile() {
     return { ...l, p, th: potentialTemp(l.T, p), Td: dewpoint(l.T, l.RH) };
   });
 }
-const ctx = { zObs: 1800, zValley: 300, cm: 5, ch: 10, precip: 0, rain24: 0, sunElev: -3 };
+const ctx = { zObs: 1800, zValley: 300, cl: 0, rh2: 40, cm: 5, ch: 10, precip: 0, rain24: 0, sunElev: -3 };
 const good = analyzeCloudSea(profile(), ctx);
 assert.ok(good.ztop > 900 && good.ztop < 1150);
 assert.deepEqual(good.ztopRange, [900, 1150]);
@@ -31,6 +31,17 @@ const dryProfile = profile().map((l) => ({
 const unfavorable = analyzeCloudSea(dryProfile, { ...ctx, sunElev: 20 });
 assert.equal(unfavorable.P, 0, 'unfavorable clear/dry conditions must show score 0');
 assert.equal(unfavorable.diagnosis, 'unfavorable');
+// Pressure-level dryness alone must not generate a false-zero when the model
+// explicitly predicts low cloud or saturation near the surface.
+const shallowCloud = analyzeCloudSea(dryProfile, { ...ctx, cl: 65 });
+assert.equal(shallowCloud.P, null, 'low cloud signal without resolved cloud top must be UNKNOWN, not ZERO');
+assert.equal(shallowCloud.diagnosis, 'unresolved-cloud-top');
+assert.match(shallowCloud.diagnosisDetails, /低云量 65%/);
+const saturatedSurface = analyzeCloudSea(dryProfile, { ...ctx, rh2: 97 });
+assert.equal(saturatedSurface.P, null, 'near-saturated surface cannot be ruled clear from sparse pressure levels');
+const missingLowCloud = analyzeCloudSea(dryProfile, { ...ctx, cl: null });
+assert.equal(missingLowCloud.P, null, 'missing low cloud observations must not masquerade as cloud-free');
+assert.equal(missingLowCloud.diagnosis, 'missing-input');
 const missingPrecip = analyzeCloudSea(profile(), { ...ctx, precip: null });
 assert.equal(missingPrecip.P, null, 'missing rain cannot be silently interpreted as dry');
 const missingMidCloud = analyzeCloudSea(profile(), { ...ctx, cm: null });
@@ -79,7 +90,7 @@ assert.equal(analyzeCloudSea([], ctx).diagnosis, 'insufficient-profile');
   const site = { lat: 27.457, lon: 114.168, zObs: 1800, zValley: 300 };
   const series = (fn) => localTimes.map((_, i) => fn(i));
   function model(id, peak, missing = false) {
-    const surf = { cm: series(() => 5), ch: series(() => 10), precip: series(() => missing ? null : 0) };
+    const surf = { cl: series(() => 0), RH2: series(() => 40), cm: series(() => 5), ch: series(() => 10), precip: series(() => missing ? null : 0) };
     const levels = Object.fromEntries(layers.map((layer) => [layer.p, {
       z: series(() => layer.z), T: series(() => layer.T), ws: series(() => layer.ws),
       RH: series((i) => i === peak ? layer.RH : 35),
