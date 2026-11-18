@@ -111,6 +111,7 @@ export function layersOf(prof) {
 export function analyzeCloudSea(prof, c) {
   const r = {
     P: null, ztop: null, zbase: null, ztopRange: null, topEstimated: false, type: 'none', margin: null,
+    lowCloud: c.cl ?? null, surfaceRH: c.rh2 ?? null,
     cap: null, invDT: null, jump: null, rhObs: null, wsObs: null, f: {}, notes: [],
   };
   if (prof.length < 2) { r.diagnosis = 'insufficient-profile'; r.diagnosisDetails = '有效气压层少于两层，无法建立低层垂直廓线'; return r; }
@@ -219,19 +220,29 @@ export function analyzeCloudSea(prof, c) {
   // Distinguish a genuinely unfavorable (no diagnosed cloud) hour from missing
   // data or a cloud layer whose upper boundary cannot be resolved.
   // No saturated levels + negligible valley-fog signal -> score 0, not missing.
-  const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08;
+  // Do not equate a dry *pressure-level* column with absence of shallow cloud.
+  // Open-Meteo supplies low cloud cover separately; previously we requested it
+  // but never passed it into this diagnosis, creating artificial zeros.
+  // 5% is a conservative screening threshold, NOT an event probability.
+  const shallowCloudSignal = c.cl != null && c.cl > 5;
+  const nearSurfaceSaturation = c.rh2 != null && c.rh2 >= 95;
+  const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08
+    && c.cl != null && c.cl <= 5 && !nearSurfaceSaturation;
   const missingFields = [
     ['cm', c.cm], ['ch', c.ch], ['precip', c.precip], ['obsRH', r.rhObs], ['obsWind', r.wsObs],
+    // Low-cloud cover is required only before concluding *absence* of shallow cloud.
+    ...(kb < 0 ? [['lowCloud', c.cl]] : []),
   ].filter(([, v]) => v == null).map(([k]) => k);
   // A dry upper profile cannot exclude shallow fog in an unsampled valley.
   const lowCeiling = Math.max(c.zValley + 300, c.zObs);
   const lowCoverage = low.z <= c.zValley + 300 && prof.at(-1).z >= lowCeiling
     && lay.every((l) => l.z0 >= lowCeiling || l.z1 - l.z0 <= 650);
-  const insufficientLow = noCloudEvidence && !lowCoverage;
-  r.P = Q == null || insufficientLow ? null
+  const insufficientLow = kb < 0 && !lowCoverage;
+  const incompleteEvidence = kb < 0 && c.cl == null;
+  r.P = Q == null || insufficientLow || incompleteEvidence ? null
     : r.ztop != null ? 100 * Fcloud * Fheight * Q
       : noCloudEvidence ? 0 : null;
-  r.diagnosis = Q == null ? 'missing-input'
+  r.diagnosis = Q == null || incompleteEvidence ? 'missing-input'
     : insufficientLow ? 'insufficient-profile'
       : r.ztop != null ? 'resolved-cloud'
       : noCloudEvidence ? 'unfavorable' : 'unresolved-cloud-top';
@@ -240,7 +251,9 @@ export function analyzeCloudSea(prof, c) {
     ? `关键输入不完整：${missingFields.join(', ') || '评分因子不可计算'}`
     : insufficientLow ? '谷底至观测点的气压层覆盖不足，无法排除浅层云雾'
     : r.diagnosis === 'unresolved-cloud-top'
-      ? '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分'
+      ? (shallowCloudSignal ? `低云量 ${Math.round(c.cl)}%，但气压层未解析出云顶；不能把低云误判为零概率`
+        : nearSurfaceSaturation ? `近地相对湿度 ${Math.round(c.rh2)}%，可能存在未解析的浅层雾；云顶未知`
+          : '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分')
       : r.diagnosis === 'unfavorable'
         ? '有效廓线未检出足够饱和低云，谷雾诊断也未达到阈值'
         : r.P === 0 && r.margin != null && r.margin <= -200
