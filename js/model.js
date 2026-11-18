@@ -114,6 +114,7 @@ export function analyzeCloudSea(prof, c) {
     lowCloud: c.cl ?? null, surfaceRH: c.rh2 ?? null,
     cap: null, invDT: null, jump: null, rhObs: null, wsObs: null, f: {}, notes: [],
   };
+  r.validPressureLayers = prof.length;
   if (prof.length < 2) { r.diagnosis = 'insufficient-profile'; r.diagnosisDetails = '有效气压层少于两层，无法建立低层垂直廓线'; return r; }
   const lay = layersOf(prof);
 
@@ -238,7 +239,7 @@ export function analyzeCloudSea(prof, c) {
   const lowCoverage = low.z <= c.zValley + 300 && prof.at(-1).z >= lowCeiling
     && lay.every((l) => l.z0 >= lowCeiling || l.z1 - l.z0 <= 650);
   const insufficientLow = kb < 0 && !lowCoverage;
-  const incompleteEvidence = kb < 0 && c.cl == null;
+  const incompleteEvidence = kb < 0 && r.ztop == null && c.cl == null;
   r.P = Q == null || insufficientLow || incompleteEvidence ? null
     : r.ztop != null ? 100 * Fcloud * Fheight * Q
       : noCloudEvidence ? 0 : null;
@@ -255,7 +256,7 @@ export function analyzeCloudSea(prof, c) {
         : nearSurfaceSaturation ? `近地相对湿度 ${Math.round(c.rh2)}%，可能存在未解析的浅层雾；云顶未知`
           : '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分')
       : r.diagnosis === 'unfavorable'
-        ? '有效廓线未检出足够饱和低云，谷雾诊断也未达到阈值'
+        ? `气压层未检出低云，低云量 ${Math.round(c.cl)}% 且谷雾诊断偏弱；规则评分 0 不代表绝对不会出现云海`
         : r.P === 0 && r.margin != null && r.margin <= -200
           ? '诊断云顶高于观测点至少 200 m：此处无法俯瞰云海，条件评分为零'
           : '已由成云、云顶高差、封盖、上空通透、风和降水因子计算条件评分';
@@ -376,6 +377,7 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
       const prof = buildProfile(m, i, site.zValley);
       const res = analyzeCloudSea(prof, {
         zObs: site.zObs, zValley: site.zValley,
+        cl: s.cl?.[i] ?? null, rh2: s.RH2?.[i] ?? null,
         cm: s.cm?.[i], ch: s.ch?.[i], precip: s.precip?.[i] ?? null,
         rain24, sunElev: sunEl[i], wind10: s.wind10?.[i],
       });
