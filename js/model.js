@@ -111,8 +111,10 @@ export function layersOf(prof) {
 export function analyzeCloudSea(prof, c) {
   const r = {
     P: null, ztop: null, zbase: null, ztopRange: null, topEstimated: false, type: 'none', margin: null,
+    lowCloud: c.cl ?? null, surfaceRH: c.rh2 ?? null,
     cap: null, invDT: null, jump: null, rhObs: null, wsObs: null, f: {}, notes: [],
   };
+  r.validPressureLayers = prof.length;
   if (prof.length < 2) { r.diagnosis = 'insufficient-profile'; r.diagnosisDetails = '有效气压层少于两层，无法建立低层垂直廓线'; return r; }
   const lay = layersOf(prof);
 
@@ -219,19 +221,29 @@ export function analyzeCloudSea(prof, c) {
   // Distinguish a genuinely unfavorable (no diagnosed cloud) hour from missing
   // data or a cloud layer whose upper boundary cannot be resolved.
   // No saturated levels + negligible valley-fog signal -> score 0, not missing.
-  const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08;
+  // Do not equate a dry *pressure-level* column with absence of shallow cloud.
+  // Open-Meteo supplies low cloud cover separately; previously we requested it
+  // but never passed it into this diagnosis, creating artificial zeros.
+  // 5% is a conservative screening threshold, NOT an event probability.
+  const shallowCloudSignal = c.cl != null && c.cl > 5;
+  const nearSurfaceSaturation = c.rh2 != null && c.rh2 >= 95;
+  const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08
+    && c.cl != null && c.cl <= 5 && !nearSurfaceSaturation;
   const missingFields = [
     ['cm', c.cm], ['ch', c.ch], ['precip', c.precip], ['obsRH', r.rhObs], ['obsWind', r.wsObs],
+    // Low-cloud cover is required only before concluding *absence* of shallow cloud.
+    ...(kb < 0 ? [['lowCloud', c.cl]] : []),
   ].filter(([, v]) => v == null).map(([k]) => k);
   // A dry upper profile cannot exclude shallow fog in an unsampled valley.
   const lowCeiling = Math.max(c.zValley + 300, c.zObs);
   const lowCoverage = low.z <= c.zValley + 300 && prof.at(-1).z >= lowCeiling
     && lay.every((l) => l.z0 >= lowCeiling || l.z1 - l.z0 <= 650);
-  const insufficientLow = noCloudEvidence && !lowCoverage;
-  r.P = Q == null || insufficientLow ? null
+  const insufficientLow = kb < 0 && !lowCoverage;
+  const incompleteEvidence = kb < 0 && r.ztop == null && c.cl == null;
+  r.P = Q == null || insufficientLow || incompleteEvidence ? null
     : r.ztop != null ? 100 * Fcloud * Fheight * Q
       : noCloudEvidence ? 0 : null;
-  r.diagnosis = Q == null ? 'missing-input'
+  r.diagnosis = Q == null || incompleteEvidence ? 'missing-input'
     : insufficientLow ? 'insufficient-profile'
       : r.ztop != null ? 'resolved-cloud'
       : noCloudEvidence ? 'unfavorable' : 'unresolved-cloud-top';
@@ -240,9 +252,11 @@ export function analyzeCloudSea(prof, c) {
     ? `关键输入不完整：${missingFields.join(', ') || '评分因子不可计算'}`
     : insufficientLow ? '谷底至观测点的气压层覆盖不足，无法排除浅层云雾'
     : r.diagnosis === 'unresolved-cloud-top'
-      ? '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分'
+      ? (shallowCloudSignal ? `低云量 ${Math.round(c.cl)}%，但气压层未解析出云顶；不能把低云误判为观景指数零分`
+        : nearSurfaceSaturation ? `近地相对湿度 ${Math.round(c.rh2)}%，可能存在未解析的浅层雾；云顶未知`
+          : '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分')
       : r.diagnosis === 'unfavorable'
-        ? '有效廓线未检出足够饱和低云，谷雾诊断也未达到阈值'
+        ? `气压层未检出低云，低云量 ${Math.round(c.cl)}% 且谷雾诊断偏弱；规则评分 0 不代表绝对不会出现云海`
         : r.P === 0 && r.margin != null && r.margin <= -200
           ? '诊断云顶高于观测点至少 200 m：此处无法俯瞰云海，条件评分为零'
           : '已由成云、云顶高差、封盖、上空通透、风和降水因子计算条件评分';
@@ -363,6 +377,7 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
       const prof = buildProfile(m, i, site.zValley);
       const res = analyzeCloudSea(prof, {
         zObs: site.zObs, zValley: site.zValley,
+        cl: s.cl?.[i] ?? null, rh2: s.RH2?.[i] ?? null,
         cm: s.cm?.[i], ch: s.ch?.[i], precip: s.precip?.[i] ?? null,
         rain24, sunElev: sunEl[i], wind10: s.wind10?.[i],
       });
@@ -423,6 +438,9 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         per[m.id] = {
           sea: bestIdx == null ? null : seaAtBest.P,
           seaAtBest, seaAtRise, sun,
+          lowCloud: s.cl?.[riseIdx] ?? null,
+          nearSurfaceRH: s.RH2?.[riseIdx] ?? null,
+          pressureLevelCount: seaAtRise.validPressureLayers,
           hike: {
             T: T2, ws, gust: s.gust?.[riseIdx], feels: T2 != null && ws != null ? windChill(T2, ws) : null,
             frz: s.frz?.[riseIdx], vis: s.vis?.[riseIdx], precip: s.precip?.[riseIdx],
@@ -437,6 +455,8 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         key: d.key, idx: d.idx, geo, rise, riseIdx, win, bestIdx, air, models: per,
         past: rise.time < now - 3600e3,
         sea: stats(V.map((v) => v.sea)),
+        lowCloud: stats(V.map((v) => v.lowCloud)),
+        nearSurfaceRH: stats(V.map((v) => v.nearSurfaceRH)),
         vis: stats(V.map((v) => v.sun.Pvis)),
         glow: stats(V.map((v) => v.sun.glow)),
         ztop: stats(scored.map((r) => r.ztop)),
