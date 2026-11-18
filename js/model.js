@@ -252,7 +252,7 @@ export function analyzeCloudSea(prof, c) {
     ? `关键输入不完整：${missingFields.join(', ') || '评分因子不可计算'}`
     : insufficientLow ? '谷底至观测点的气压层覆盖不足，无法排除浅层云雾'
     : r.diagnosis === 'unresolved-cloud-top'
-      ? (shallowCloudSignal ? `低云量 ${Math.round(c.cl)}%，但气压层未解析出云顶；不能把低云误判为零概率`
+      ? (shallowCloudSignal ? `低云量 ${Math.round(c.cl)}%，但气压层未解析出云顶；不能把低云误判为观景指数零分`
         : nearSurfaceSaturation ? `近地相对湿度 ${Math.round(c.rh2)}%，可能存在未解析的浅层雾；云顶未知`
           : '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分')
       : r.diagnosis === 'unfavorable'
