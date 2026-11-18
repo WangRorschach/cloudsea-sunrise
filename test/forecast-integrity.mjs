@@ -108,6 +108,16 @@ assert.equal(analyzeCloudSea([], ctx).diagnosis, 'insufficient-profile');
   assert.equal(day.sea.n, 2);
   const partial = run([model('A', win[0]), model('B', win[1], true)]).days[0];
   assert.equal(partial.sea.n, 1);
+  // End-to-end regression: gridded low-cloud forecast must propagate through
+  // data normalization -> model -> daily ensemble; never silently become 0.
+  const rawLowCloud = model('C', -1);
+  rawLowCloud.surf.cl = series(() => 65);
+  const lowerLayerCloud = run([rawLowCloud]);
+  assert.equal(lowerLayerCloud.hours[0].P.mean, null);
+  assert.equal(lowerLayerCloud.hours[0].models.C.diagnosis, 'unresolved-cloud-top');
+  assert.equal(lowerLayerCloud.days[0].sea.mean, null);
+  assert.equal(lowerLayerCloud.days[0].lowCloud.mean, 65);
+  assert.equal(lowerLayerCloud.days[0].nearSurfaceRH.mean, 40);
   const missing = run([model('A', win[0], true)]).days[0];
   assert.equal(missing.bestIdx, null);
   assert.equal(missing.sea.mean, null);
