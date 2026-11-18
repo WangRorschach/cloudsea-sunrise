@@ -438,6 +438,9 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         per[m.id] = {
           sea: bestIdx == null ? null : seaAtBest.P,
           seaAtBest, seaAtRise, sun,
+          lowCloud: s.cl?.[riseIdx] ?? null,
+          nearSurfaceRH: s.RH2?.[riseIdx] ?? null,
+          pressureLevelCount: seaAtRise.validPressureLayers,
           hike: {
             T: T2, ws, gust: s.gust?.[riseIdx], feels: T2 != null && ws != null ? windChill(T2, ws) : null,
             frz: s.frz?.[riseIdx], vis: s.vis?.[riseIdx], precip: s.precip?.[riseIdx],
@@ -452,6 +455,8 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         key: d.key, idx: d.idx, geo, rise, riseIdx, win, bestIdx, air, models: per,
         past: rise.time < now - 3600e3,
         sea: stats(V.map((v) => v.sea)),
+        lowCloud: stats(V.map((v) => v.lowCloud)),
+        nearSurfaceRH: stats(V.map((v) => v.nearSurfaceRH)),
         vis: stats(V.map((v) => v.sun.Pvis)),
         glow: stats(V.map((v) => v.sun.glow)),
         ztop: stats(scored.map((r) => r.ztop)),
