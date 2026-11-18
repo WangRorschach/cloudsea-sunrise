@@ -93,12 +93,16 @@ export function summaryHtml(res, fc, site, day, hm) {
   const eps = dayEpisodes(res, fc, day.key);
   const riseAgg = hourAgg(res, fc, day.riseIdx);
   const out = [];
-  if (!eps.length && !day.idx.some((i) => res.hours[i].P.mean != null)) {
+  const unknownHours = day.idx.filter((i) => res.hours[i].P.mean == null).length;
+  const validHours = day.idx.length - unknownHours;
+  if (!eps.length && !validHours) {
     out.push('<p class="cs-lead none">当天所有有效时段的云海条件指数均无法计算：可能是气压层资料缺失，或低云存在但云顶没有有效上界。无法计算并不等于没有云海。</p>');
+  } else if (!eps.length && unknownHours > validHours) {
+    out.push(`<p class="cs-lead none">当天仅 ${validHours}/${day.idx.length} 个小时有有效云海条件评分，其余 ${unknownHours} 小时因资料或云顶上界不足无法判断。不能称为全天无云海。</p>`);
   } else if (!eps.length) {
     const pk = day.idx.reduce((a, b) => ((res.hours[b].P.mean ?? 0) > (res.hours[a].P.mean ?? 0) ? b : a), day.idx[0]);
     const a = hourAgg(res, fc, pk);
-    out.push(`<p class="cs-lead none">当天<b>没有明显的云海时段</b>（全天集合条件指数均低于 ${SEA_ON}/100，最高 ${r0(a.P.mean, '/100')}，出现在 ${hh(a.local)} 时）。</p>`);
+    out.push(`<p class="cs-lead none">已评分的 ${validHours} 个小时中没有达到云海条件阈值 ${SEA_ON}/100（最高 ${r0(a.P.mean, '/100')}，出现在 ${hh(a.local)} 时）${unknownHours ? `；另外 ${unknownHours} 小时无法计算` : ''}。这不是事件出现概率。</p>`);
     if (a.limit) out.push(`<p>主要限制因子：<b>${a.limit.txt}</b>（因子值 ${a.limit.v.toFixed(2)}，1 为最有利）。</p>`);
   } else {
     out.push(`<p class="cs-lead">当天有 <b>${eps.length}</b> 个云海条件有利时段：</p><ol class="cs-eps">${eps.map((e) => {
@@ -112,6 +116,7 @@ export function summaryHtml(res, fc, site, day, hm) {
         峰值 <b>${hh(pk.local)} 时 ${r0(pk.P.mean, '/100')}</b>（${models}）${e.clearAt ? `；预计 ${hm(e.clearAt)} 前后减弱` : ''}。</li>`;
     }).join('')}</ol>`);
   }
+  if (unknownHours && eps.length) out.push(`<p>另有 ${unknownHours} 个小时没有足够气象资料或云顶边界，不能据此判定无云海。</p>`);
   out.push(`<p>日出 ${hm(day.rise.time)} 时：云海条件指数 <b>${r0(riseAgg.P.mean, '/100')}</b>（模式范围 ${r0(riseAgg.P.min)}–${r0(riseAgg.P.max)}/100）${riseAgg.ztop.mean != null && (riseAgg.P.mean ?? 0) >= 8 ? `，云顶 ${r0(riseAgg.ztop.mean)} m` : ''}；观测高度相对湿度 ${r0(riseAgg.rh.mean, '%')}，低云量 ${r0(riseAgg.cl.mean, '%')}${riseAgg.limit && (riseAgg.P.mean ?? 0) < 40 ? `；最主要的限制是“${riseAgg.limit.txt}”` : ''}。</p>`);
   return out.join('');
 }
@@ -132,8 +137,8 @@ export function heatmapHtml(res, days, { selected, dayLabel, relDay }) {
       const p = h.P.mean;
       const zt = h.ztop.mean;
       const night = h.sunEl < -6;
-      const tip = `${L.md} ${k}时 · 云海条件指数 ${r0(p)}/100（${r0(h.P.min)}–${r0(h.P.max)}/100）${zt != null && p >= 8 ? ` · 云顶 ${Math.round(zt)} m` : ''}`;
-      return `<span class="hm-c${night ? ' night' : ''}${k === +riseH ? ' rise' : ''}${i === selected ? ' sel' : ''}" data-i="${i}" title="${tip}" style="background:${p == null ? 'rgba(110,120,145,.18)' : heatColor(p, night)};color:${p != null && p >= 45 ? '#0b1220' : '#dfe8f6'}">${p != null && p >= 15 ? Math.round(p) : ''}</span>`;
+      const tip = `${L.md} ${k}时 · 云海条件指数 ${r0(p)}/100（${r0(h.P.min)}–${r0(h.P.max)}/100） · 有效 ${h.P.n}/${res.models.length} 模式${zt != null && p >= 8 ? ` · 云顶 ${Math.round(zt)} m` : ''}`;
+      return `<span class="hm-c${night ? ' night' : ''}${k === +riseH ? ' rise' : ''}${i === selected ? ' sel' : ''}" data-i="${i}" title="${tip}" style="background:${p == null ? 'rgba(110,120,145,.18)' : heatColor(p, night)};color:${p != null && p >= 45 ? '#0b1220' : '#dfe8f6'}">${p == null ? '–' : p < 0.5 ? '0' : Math.round(p)}</span>`;
     }).join('');
     return `<div class="hm-row${d.past ? ' past' : ''}"><span class="hm-d">${relDay(d.key) ?? L.w}<small>${L.md}</small></span>${cells}</div>`;
   }).join('');
