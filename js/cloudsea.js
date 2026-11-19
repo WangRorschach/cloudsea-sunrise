@@ -1,6 +1,6 @@
 // 云海详细预报：逐小时集合诊断汇总、云海时段识别、7×24 热力图、逐时表、周边观景点与云顶对比、覆盖面积
-import { MODELS, stats } from './model.js';
-import { fetchElevations } from './data.js';
+import { MODELS, stats } from './model.js?v=20261119-r8';
+import { fetchElevations } from './data.js?v=20261119-r8';
 import { destination } from './sun.js';
 
 const r0 = (x, s = '') => (x == null || Number.isNaN(x) ? '—' : `${Math.round(x)}${s}`);

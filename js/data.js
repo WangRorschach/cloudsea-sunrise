@@ -1,5 +1,5 @@
 // 数据获取：Open-Meteo（多模式气压层预报、CAMS 气溶胶、地名检索）+ Mapterhorn 地形瓦片取高程（浏览器内解码，失败时退回 Open-Meteo DEM）
-import { LEVELS, HORIZON_DIST } from './model.js';
+import { LEVELS, HORIZON_DIST } from './model.js?v=20261119-r8';
 import { destination } from './sun.js';
 
 const API = 'https://api.open-meteo.com/v1';
@@ -35,21 +35,25 @@ async function cachePut(url, j) {
   } catch { /* 存储满或不可用时忽略 */ }
 }
 
-async function getJSON(url, tries = 3) {
+async function getJSON(url, tries = 3, timeoutMs = 25000) {
   const hit = await cacheGet(url);
   if (hit) return hit;
   let last;
   for (let k = 0; k < tries; k++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: controller.signal });
       const j = await r.json().catch(() => null);
       if (r.ok && j && !j.error) { cachePut(url, j); return j; }
       last = new Error(j?.reason || `HTTP ${r.status}`);
       if (r.status === 400 || r.status === 429) break;
     } catch (e) {
-      last = e;
+      last = e?.name === 'AbortError' ? new Error(`天气接口超时（${timeoutMs / 1000} s）`) : e;
+    } finally {
+      clearTimeout(timer);
     }
-    await new Promise((res) => setTimeout(res, 600 * (k + 1)));
+    if (k + 1 < tries) await new Promise((res) => setTimeout(res, 600 * (k + 1)));
   }
   throw last;
 }
@@ -126,9 +130,16 @@ export async function fetchSiteTerrain(lat, lon) {
   const ring = [];
   for (const r of [2000, 5000, 9000]) for (let b = 0; b < 360; b += 30) ring.push(destination(lat, lon, b, r));
   const el = await fetchElevations([[lat, lon], ...ring], [12, ...ring.map(() => 11)]);
-  const ringEl = el.slice(1).filter((x) => x != null).sort((a, b) => a - b);
-  const q = ringEl[Math.floor(ringEl.length * 0.15)] ?? el[0];
-  return { dem: el[0], valley: q, ringMin: ringEl[0], ringMax: ringEl[ringEl.length - 1] };
+  const samples = ring.map((ll, i) => ({ ll, z: el[i + 1] }))
+    .filter((x) => Number.isFinite(x.z)).sort((a, b) => a.z - b.z);
+  // Preserve the coordinates paired with the percentile DEM elevation.
+  // A valley weather forecast must be requested at that location, not the summit.
+  const chosen = samples[Math.floor(samples.length * 0.15)] ?? null;
+  return {
+    dem: el[0], valley: chosen?.z ?? el[0],
+    valleyPoint: chosen == null ? null : { lat: chosen.ll[0], lon: chosen.ll[1], z: chosen.z },
+    ringMin: samples[0]?.z ?? null, ringMax: samples.at(-1)?.z ?? null,
+  };
 }
 
 export function profileDistances() {
@@ -168,6 +179,34 @@ export async function fetchForecast(lat, lon, zObs, modelIds) {
     times: H.time.map((s) => parseLocal(s) - d.utc_offset_seconds * 1000),
     models,
   };
+}
+
+// Forecast a representative terrain-sampled valley point separately from
+// the observer summit. These are NWP grid estimates, not station observations.
+export async function fetchValleyForecast(point, modelIds) {
+  if (!point || !Number.isFinite(point.z) || !modelIds.length) return null;
+  const keys = {
+    T2: 'temperature_2m', RH2: 'relative_humidity_2m',
+    cl: 'cloud_cover_low', wind10: 'wind_speed_10m', precip: 'precipitation',
+  };
+  const url = `${API}/forecast?latitude=${f4(point.lat)}&longitude=${f4(point.lon)}`
+    + `&elevation=${Math.round(point.z)}&hourly=${Object.values(keys).join(',')}`
+    + `&models=${modelIds.join(',')}&timezone=auto&forecast_days=7&past_days=1&wind_speed_unit=ms`;
+  // Optional enhancement: do not let the independent valley API hold the
+  // entire original 3D forecast UI behind a long network wait.
+  const response = await getJSON(url, 1, 12000);
+  const H = response.hourly;
+  if (!Array.isArray(H?.time)) throw new Error('谷地预报缺少时刻序列');
+  const models = {};
+  for (const id of modelIds) {
+    const surf = {};
+    for (const [key, field] of Object.entries(keys)) {
+      const values = H[`${field}_${id}`] ?? (modelIds.length === 1 ? H[field] : null);
+      surf[key] = Array.isArray(values) ? values : null;
+    }
+    models[id] = surf;
+  }
+  return { point, localTimes: H.time, models, tz: response.timezone };
 }
 
 // 沿每天日出方位的远方云量（多模式）
