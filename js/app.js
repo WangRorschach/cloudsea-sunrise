@@ -1,10 +1,10 @@
 // 页面控制：加载流程、面板渲染、地图与图表联动、观测记录
 /* global maplibregl */
-import { MODELS, runForecast } from './model.js?v=20261118-r7';
+import { MODELS, runForecast } from './model.js?v=20261119-r8';
 import { findRise } from './sun.js';
 import {
   fetchSiteTerrain, fetchForecast, fetchValleyForecast, fetchHorizon, fetchAirQuality, fetchTerrainProfile,
-} from './data.js';
+} from './data.js?v=20261119-r8';
 import { SPOTS } from './spots.js';
 import * as M from './map.js';
 import { drawTimeline, drawProfile, drawHorizon, drawCloudLayer, modelColor } from './charts.js';
@@ -317,7 +317,7 @@ function renderDetail(d) {
     </div>
     <p class="data-diagnostics"><b>山顶格点低云量 ${r0(d.lowCloud.mean, '%')}</b> · 山顶RH ${r0(d.nearSurfaceRH.mean, '%')} · <b>独立谷地RH ${r0(d.valleyRH.mean, '%')}</b> · 谷地低云 ${r0(d.valleyLowCloud.mean, '%')} · 谷雾支持 ${d.valleyFogVotes}/${Object.keys(d.models).length} 模式。<br>${esc(dailyDataNote(d))}${d.ztop.n ? ` · 云顶范围 ${r0(d.ztop.min)}–${r0(d.ztop.max)} m（${d.ztop.n} 个模式）` : ''}。0 是条件评分不利；— 是缺测或云顶未解析。谷雾指标和云海指数均未经实况概率校准。</p>
     <details class="score-explain"><summary>查看评分公式与每个天气模式的计算依据</summary>
-      <p>云海条件指数 S = 100 × 成云因子 × 高度因子 × Q；Q = 封盖因子<sup>0.35</sup> × 上空通透因子<sup>0.30</sup> × 风速因子<sup>0.15</sup> × 无降水因子<sup>0.20</sup>。这些权重未经实况校准，不是概率。</p>
+      <p>云海条件指数 S = 100 × 成云因子 × 高度因子 × Q；Q = 封盖因子<sup>0.35</sup> × 上空通透因子<sup>0.30</sup> × 风速因子<sup>0.15</sup> × 无降水因子<sup>0.20</sup>。这些权重未经实况校准，不是概率。谷地成雾条件单独诊断，不代表已确认云顶低于观测点。</p>
       <div class="score-mode-list">${Object.entries(d.models).map(([id, m]) => { const v = m.seaAtBest; return `<div><b>${esc(modelName(id))}</b><span>${d.bestIdx == null ? '云海评分' : '最佳时刻指数'} ${scoreText(v?.P)}${v?.P == null ? '' : '/100'}</span><small>山顶低云量 ${r0(m.lowCloud, '%')} · 山顶 RH ${r0(m.nearSurfaceRH, '%')} · 谷地 RH ${r0(m.valleyFog?.rh, '%')} · 谷地云量 ${r0(m.valleyFog?.cl, '%')} · 谷雾线索 ${m.valleyFog?.status === 'supportive' ? '支持' : m.valleyFog?.status === 'weak' ? '偏弱' : '未确认'} · 有效气压层 ${m.pressureLevelCount ?? 0} 层。${esc(diagnosticLabel(v))}</small></div>`; }).join('')}</div>
     </details>
     <ul class="why">${reasons(d).map((x) => `<li>${x}</li>`).join('')}</ul>
