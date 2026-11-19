@@ -104,14 +104,34 @@ export function layersOf(prof) {
   return lay;
 }
 
+// Valley fog is separately screened using NWP surface data requested at a
+// DEM-selected valley point. Its score is a heuristic *signal*, not a probability
+// and not a cloud-top height. Do not assume summit-level RH2 describes the valley.
+export function diagnoseValleyFog(valley) {
+  const rh = valley?.RH2;
+  const wind = valley?.wind10;
+  const cl = valley?.cl;
+  if (![rh, wind, cl].every(Number.isFinite)) {
+    return { status: 'unknown', score: null, rh: rh ?? null, wind: wind ?? null, cl: cl ?? null };
+  }
+  const moisture = piecewise(rh, [[50, 0], [80, 0.25], [90, 0.55], [95, 0.8], [100, 1]]);
+  const still = piecewise(wind, [[0, 1], [3, 1], [5, 0.8], [8, 0.3], [12, 0.05]]);
+  const cloud = piecewise(cl, [[0, 0.5], [20, 0.75], [50, 1], [100, 1]]);
+  const score = 100 * moisture * still * cloud;
+  const status = ((rh >= 93 && wind <= 6) || (cl >= 30 && rh >= 85))
+    ? 'supportive' : rh < 83 && cl <= 5 ? 'weak' : 'mixed';
+  return { status, score, rh, wind, cl };
+}
+
 /**
  * 云海诊断
- * c: { zObs, zValley, cm, ch, precip, rain24, sunElev, wind10 }
+ * c: { zObs, zValley, cl, rh2, valley, cm, ch, precip, rain24, sunElev, wind10 }
  */
 export function analyzeCloudSea(prof, c) {
   const r = {
     P: null, ztop: null, zbase: null, ztopRange: null, topEstimated: false, type: 'none', margin: null,
     lowCloud: c.cl ?? null, surfaceRH: c.rh2 ?? null,
+    valleyFog: diagnoseValleyFog(c.valley),
     cap: null, invDT: null, jump: null, rhObs: null, wsObs: null, f: {}, notes: [],
   };
   r.validPressureLayers = prof.length;
@@ -227,8 +247,12 @@ export function analyzeCloudSea(prof, c) {
   // 5% is a conservative screening threshold, NOT an event probability.
   const shallowCloudSignal = c.cl != null && c.cl > 5;
   const nearSurfaceSaturation = c.rh2 != null && c.rh2 >= 95;
+  // A clear summit grid is not evidence of a fog-free valley.
+  // A zero is issued only if both mountain and an independently sampled valley
+  // agree on weak cloud/fog conditions. Otherwise keep the result unresolved.
   const noCloudEvidence = kb < 0 && fogP != null && fogP <= 0.08
-    && c.cl != null && c.cl <= 5 && !nearSurfaceSaturation;
+    && c.cl != null && c.cl <= 5 && !nearSurfaceSaturation
+    && r.valleyFog.status === 'weak';
   const missingFields = [
     ['cm', c.cm], ['ch', c.ch], ['precip', c.precip], ['obsRH', r.rhObs], ['obsWind', r.wsObs],
     // Low-cloud cover is required only before concluding *absence* of shallow cloud.
@@ -240,6 +264,7 @@ export function analyzeCloudSea(prof, c) {
     && lay.every((l) => l.z0 >= lowCeiling || l.z1 - l.z0 <= 650);
   const insufficientLow = kb < 0 && !lowCoverage;
   const incompleteEvidence = kb < 0 && r.ztop == null && c.cl == null;
+  const valleyUnavailable = kb < 0 && r.ztop == null && r.valleyFog.status === 'unknown';
   r.P = Q == null || insufficientLow || incompleteEvidence ? null
     : r.ztop != null ? 100 * Fcloud * Fheight * Q
       : noCloudEvidence ? 0 : null;
@@ -252,9 +277,12 @@ export function analyzeCloudSea(prof, c) {
     ? `关键输入不完整：${missingFields.join(', ') || '评分因子不可计算'}`
     : insufficientLow ? '谷底至观测点的气压层覆盖不足，无法排除浅层云雾'
     : r.diagnosis === 'unresolved-cloud-top'
-      ? (shallowCloudSignal ? `低云量 ${Math.round(c.cl)}%，但气压层未解析出云顶；不能把低云误判为观景指数零分`
-        : nearSurfaceSaturation ? `近地相对湿度 ${Math.round(c.rh2)}%，可能存在未解析的浅层雾；云顶未知`
-          : '检测到低云或谷雾线索，但气压层无法确定云顶上界；不强行给出评分')
+      ? (r.valleyFog.status === 'supportive'
+        ? `谷地湿度 ${Math.round(r.valleyFog.rh)}%、风速 ${r.valleyFog.wind.toFixed(1)} m/s、低云量 ${Math.round(r.valleyFog.cl)}%；谷雾条件有利，但云顶仍无法确定`
+        : valleyUnavailable ? '谷地独立预报未取得，不能凭山顶晴朗判断山谷无雾'
+        : shallowCloudSignal ? `山顶网格低云量 ${Math.round(c.cl)}%，但气压层未解析出云顶；不能判为零分`
+          : nearSurfaceSaturation ? `山顶附近相对湿度 ${Math.round(c.rh2)}%，可能存在未解析浅层云雾；云顶未知`
+            : '山谷云雾信号不确定，气压层无法确定云顶上界；不强行给出评分')
       : r.diagnosis === 'unfavorable'
         ? `气压层未检出低云，低云量 ${Math.round(c.cl)}% 且谷雾诊断偏弱；规则评分 0 不代表绝对不会出现云海`
         : r.P === 0 && r.margin != null && r.margin <= -200
@@ -360,8 +388,19 @@ function nearestIdx(times, t) {
  * aq: {times, aod, pm25, dust} | null
  * terrain: [{x,z}] 沿日出方位的地形剖面
  */
-export function runForecast({ fc, site, horizon, aq, terrain }) {
+export function runForecast({ fc, site, horizon, aq, terrain, valley = null }) {
   const models = fc.models.filter((m) => m.available);
+  const valleyTimes = valley?.localTimes ? new Map(valley.localTimes.map((time, i) => [time, i])) : null;
+  const valleyAt = (id, i) => {
+    const k = valleyTimes?.get(fc.localTimes[i]);
+    const surf = valley?.models?.[id];
+    if (k == null || !surf) return null;
+    return {
+      RH2: surf.RH2?.[k] ?? null, T2: surf.T2?.[k] ?? null,
+      cl: surf.cl?.[k] ?? null, wind10: surf.wind10?.[k] ?? null,
+      precip: surf.precip?.[k] ?? null,
+    };
+  };
   const sunEl = fc.times.map((t) => solarPosition(t, site.lat, site.lon).elevation);
 
   const hours = fc.times.map((t, i) => {
@@ -377,6 +416,7 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
       const prof = buildProfile(m, i, site.zValley);
       const res = analyzeCloudSea(prof, {
         zObs: site.zObs, zValley: site.zValley,
+        valley: valleyAt(m.id, i),
         cl: s.cl?.[i] ?? null, rh2: s.RH2?.[i] ?? null,
         cm: s.cm?.[i], ch: s.ch?.[i], precip: s.precip?.[i] ?? null,
         rain24, sunElev: sunEl[i], wind10: s.wind10?.[i],
@@ -441,6 +481,7 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
           lowCloud: s.cl?.[riseIdx] ?? null,
           nearSurfaceRH: s.RH2?.[riseIdx] ?? null,
           pressureLevelCount: seaAtRise.validPressureLayers,
+          valleyFog: seaAtRise.valleyFog,
           hike: {
             T: T2, ws, gust: s.gust?.[riseIdx], feels: T2 != null && ws != null ? windChill(T2, ws) : null,
             frz: s.frz?.[riseIdx], vis: s.vis?.[riseIdx], precip: s.precip?.[riseIdx],
@@ -457,6 +498,10 @@ export function runForecast({ fc, site, horizon, aq, terrain }) {
         sea: stats(V.map((v) => v.sea)),
         lowCloud: stats(V.map((v) => v.lowCloud)),
         nearSurfaceRH: stats(V.map((v) => v.nearSurfaceRH)),
+        valleyRH: stats(V.map((v) => v.valleyFog?.rh)),
+        valleyLowCloud: stats(V.map((v) => v.valleyFog?.cl)),
+        valleyFogIndex: stats(V.map((v) => v.valleyFog?.score)),
+        valleyFogVotes: V.filter((v) => v.valleyFog?.status === 'supportive').length,
         vis: stats(V.map((v) => v.sun.Pvis)),
         glow: stats(V.map((v) => v.sun.glow)),
         ztop: stats(scored.map((r) => r.ztop)),
