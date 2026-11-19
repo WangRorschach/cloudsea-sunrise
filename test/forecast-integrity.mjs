@@ -1,6 +1,6 @@
 // Regression tests for missing values, uncertain cloud tops and score semantics.
 import assert from 'node:assert/strict';
-import { analyzeCloudSea, analyzeSunrise, potentialTemp, dewpoint, stats, runForecast } from '../js/model.js';
+import { analyzeCloudSea, analyzeSunrise, potentialTemp, dewpoint, stats, runForecast, diagnoseValleyFog } from '../js/model.js';
 
 function profile() {
   return [
@@ -15,7 +15,8 @@ function profile() {
     return { ...l, p, th: potentialTemp(l.T, p), Td: dewpoint(l.T, l.RH) };
   });
 }
-const ctx = { zObs: 1800, zValley: 300, cl: 0, rh2: 40, cm: 5, ch: 10, precip: 0, rain24: 0, sunElev: -3 };
+const valleyDry = { RH2: 40, wind10: 2, cl: 0, T2: 8, precip: 0 };
+const ctx = { zObs: 1800, zValley: 300, cl: 0, rh2: 40, cm: 5, ch: 10, precip: 0, rain24: 0, sunElev: -3, valley: valleyDry };
 const good = analyzeCloudSea(profile(), ctx);
 assert.ok(good.ztop > 900 && good.ztop < 1150);
 assert.deepEqual(good.ztopRange, [900, 1150]);
@@ -31,6 +32,17 @@ const dryProfile = profile().map((l) => ({
 const unfavorable = analyzeCloudSea(dryProfile, { ...ctx, sunElev: 20 });
 assert.equal(unfavorable.P, 0, 'unfavorable clear/dry conditions must show score 0');
 assert.equal(unfavorable.diagnosis, 'unfavorable');
+assert.equal(diagnoseValleyFog(valleyDry).status, 'weak');
+const valleyFog = { RH2: 98, wind10: 2, cl: 40, T2: 7, precip: 0 };
+const foggyValley = analyzeCloudSea(dryProfile, { ...ctx, sunElev: -3, valley: valleyFog });
+assert.equal(foggyValley.P, null, 'dry mountain profile cannot override humid foggy valley');
+assert.equal(foggyValley.diagnosis, 'unresolved-cloud-top');
+assert.match(foggyValley.diagnosisDetails, /谷地湿度 98%/);
+assert.equal(foggyValley.valleyFog.status, 'supportive');
+assert.ok(foggyValley.valleyFog.score > 0, 'separate valley fog signal should be visible');
+const missingValley = analyzeCloudSea(dryProfile, { ...ctx, valley: null });
+assert.equal(missingValley.P, null, 'unavailable valley data must not imply fog-free valleys');
+assert.equal(missingValley.valleyFog.status, 'unknown');
 // Pressure-level dryness alone must not generate a false-zero when the model
 // explicitly predicts low cloud or saturation near the surface.
 const shallowCloud = analyzeCloudSea(dryProfile, { ...ctx, cl: 65 });
@@ -98,7 +110,16 @@ assert.equal(analyzeCloudSea([], ctx).diagnosis, 'insufficient-profile');
     }]));
     return { id, available: true, surf, levels };
   }
-  const run = (models) => runForecast({ fc: { models, localTimes, times, offset }, site });
+  const run = (models, overrideValley) => {
+    const valley = overrideValley === undefined ? {
+      localTimes,
+      models: Object.fromEntries(models.map(({ id }) => [id, {
+        RH2: series(() => 40), wind10: series(() => 2),
+        cl: series(() => 0), T2: series(() => 8), precip: series(() => 0),
+      }])),
+    } : overrideValley;
+    return runForecast({ fc: { models, localTimes, times, offset }, site, valley });
+  };
   const win = run([model('A', 0)]).days[0].win;
   const staggered = run([model('A', win[0]), model('B', win[1])]);
   const day = staggered.days[0];
@@ -118,6 +139,15 @@ assert.equal(analyzeCloudSea([], ctx).diagnosis, 'insufficient-profile');
   assert.equal(lowerLayerCloud.days[0].sea.mean, null);
   assert.equal(lowerLayerCloud.days[0].lowCloud.mean, 65);
   assert.equal(lowerLayerCloud.days[0].nearSurfaceRH.mean, 40);
+  const valleyWet = { localTimes, models: { C: {
+    RH2: series(() => 98), wind10: series(() => 2),
+    cl: series(() => 40), T2: series(() => 8), precip: series(() => 0),
+  } } };
+  const wetOnly = run([model('C', -1)], valleyWet);
+  assert.equal(wetOnly.hours[0].P.mean, null, 'wet valley vs clear summit must not score zero');
+  assert.equal(wetOnly.hours[0].models.C.valleyFog.status, 'supportive');
+  assert.equal(wetOnly.days[0].valleyFogVotes, 1);
+  assert.equal(wetOnly.days[0].valleyRH.mean, 98);
   const missing = run([model('A', win[0], true)]).days[0];
   assert.equal(missing.bestIdx, null);
   assert.equal(missing.sea.mean, null);
