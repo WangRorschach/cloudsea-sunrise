@@ -118,7 +118,7 @@ export function diagnoseValleyFog(valley) {
   const still = piecewise(wind, [[0, 1], [3, 1], [5, 0.8], [8, 0.3], [12, 0.05]]);
   const cloud = piecewise(cl, [[0, 0.5], [20, 0.75], [50, 1], [100, 1]]);
   const score = 100 * moisture * still * cloud;
-  const status = ((rh >= 93 && wind <= 6) || (cl >= 30 && rh >= 85))
+  const status = ((rh >= 93 && wind <= 6) || (cl >= 30 && rh >= 85 && wind <= 8))
     ? 'supportive' : rh < 83 && cl <= 5 ? 'weak' : 'mixed';
   return { status, score, rh, wind, cl };
 }
