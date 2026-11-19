@@ -167,7 +167,7 @@ function renderSite() {
       <div>可用模式<b>${S.res ? `${S.res.models.length} / ${MODELS.length}` : '—'}</b></div>
     </div>
     ${warn.map((w) => `<div class="warnline">⚠ ${w}</div>`).join('')}
-    ${s.valleySample && S.res ? `<div class="warnline">谷地预报：${S.valley ? '已取得独立模式网格，非现场观测' : '接口不可用；谷雾条件暂无法排除'} · ${s.valleySample.lat.toFixed(3)}°, ${s.valleySample.lon.toFixed(3)}°</div>` : ''}`;
+    ${s.valleySample && S.res ? `<div class="warnline">低海拔参考点预报：${S.valley ? '已获取（可能与山顶使用同一粗分辨率格点，非现场观测）' : '接口不可用；谷雾条件暂无法排除'} · ${s.valleySample.lat.toFixed(3)}°, ${s.valleySample.lon.toFixed(3)}°</div>` : ''}`;
 }
 
 // ---------- 7 天卡片 ----------
@@ -182,7 +182,7 @@ function renderDays() {
       <div class="sea" title="${esc(dailyDataNote(d))}">
         <div class="lbl"><span>云海 · 日出 ${hm(d.rise.time)}</span><b>${scoreText(d.sea.mean)}${d.sea.mean == null ? '' : '/100'}</b></div>
         <div class="meter" title="条件指数模式范围 ${r0(mn)}–${r0(mx)} /100"><span class="rng" style="left:${mn}%;width:${mx - mn}%"></span><span class="val" style="width:${d.sea.mean ?? 0}%"></span></div>
-        <small>谷地RH ${r0(d.valleyRH.mean, '%')} · 谷雾支持 ${d.valleyFogVotes}/${Object.keys(d.models).length} · 评分有效 ${d.sea.n}/${Object.keys(d.models).length}</small>
+        <small>日出低海拔RH ${r0(d.valleyRH.mean, '%')} · ${d.valleyRH.n ? `成雾线索 ${d.valleyFogVotes}/${d.valleyRH.n}` : '谷地资料不可用'} · 评分有效 ${d.sea.n}/${Object.keys(d.models).length}</small>
       </div>
       <div class="m">日出<b class="sun">${scoreText(d.vis.mean)}${d.vis.mean == null ? '' : '/100'}</b></div>
       <div class="m">朝霞<b>${r0(d.glow.mean)}</b></div>
@@ -315,7 +315,7 @@ function renderDetail(d) {
       <div><small>日出可见条件指数</small><b class="sun">${r0(d.vis.mean)}</b><span>/100 · ${r0(d.vis.min)}–${r0(d.vis.max)}</span></div>
       <div><small>朝霞指数</small><b>${r0(d.glow.mean)}</b><span>/ 100</span></div>
     </div>
-    <p class="data-diagnostics"><b>山顶格点低云量 ${r0(d.lowCloud.mean, '%')}</b> · 山顶RH ${r0(d.nearSurfaceRH.mean, '%')} · <b>独立谷地RH ${r0(d.valleyRH.mean, '%')}</b> · 谷地低云 ${r0(d.valleyLowCloud.mean, '%')} · 谷雾支持 ${d.valleyFogVotes}/${Object.keys(d.models).length} 模式。<br>${esc(dailyDataNote(d))}${d.ztop.n ? ` · 云顶范围 ${r0(d.ztop.min)}–${r0(d.ztop.max)} m（${d.ztop.n} 个模式）` : ''}。0 是条件评分不利；— 是缺测或云顶未解析。谷雾指标和云海指数均未经实况概率校准。</p>
+    <p class="data-diagnostics"><b>山顶格点低云量 ${r0(d.lowCloud.mean, '%')}</b> · 山顶RH ${r0(d.nearSurfaceRH.mean, '%')} · <b>独立谷地RH ${r0(d.valleyRH.mean, '%')}</b> · 谷地低云 ${r0(d.valleyLowCloud.mean, '%')} · ${d.valleyRH.n ? `谷雾支持 ${d.valleyFogVotes}/${d.valleyRH.n} 模式` : '谷地资料不可用'}。<br>${esc(dailyDataNote(d))}${d.ztop.n ? ` · 云顶范围 ${r0(d.ztop.min)}–${r0(d.ztop.max)} m（${d.ztop.n} 个模式）` : ''}。0 是条件评分不利；— 是缺测或云顶未解析。谷雾指标和云海指数均未经实况概率校准。</p>
     <details class="score-explain"><summary>查看评分公式与每个天气模式的计算依据</summary>
       <p>云海条件指数 S = 100 × 成云因子 × 高度因子 × Q；Q = 封盖因子<sup>0.35</sup> × 上空通透因子<sup>0.30</sup> × 风速因子<sup>0.15</sup> × 无降水因子<sup>0.20</sup>。这些权重未经实况校准，不是概率。谷地成雾条件单独诊断，不代表已确认云顶低于观测点。</p>
       <div class="score-mode-list">${Object.entries(d.models).map(([id, m]) => { const v = m.seaAtBest; return `<div><b>${esc(modelName(id))}</b><span>${d.bestIdx == null ? '云海评分' : '最佳时刻指数'} ${scoreText(v?.P)}${v?.P == null ? '' : '/100'}</span><small>山顶低云量 ${r0(m.lowCloud, '%')} · 山顶 RH ${r0(m.nearSurfaceRH, '%')} · 谷地 RH ${r0(m.valleyFog?.rh, '%')} · 谷地云量 ${r0(m.valleyFog?.cl, '%')} · 谷雾线索 ${m.valleyFog?.status === 'supportive' ? '支持' : m.valleyFog?.status === 'weak' ? '偏弱' : '未确认'} · 有效气压层 ${m.pressureLevelCount ?? 0} 层。${esc(diagnosticLabel(v))}</small></div>`; }).join('')}</div>
@@ -367,7 +367,7 @@ function renderModelTable(d) {
   }).join('');
   $('#model-table').innerHTML = `<table>
     <thead><tr><th>模式</th><th>云海指数</th><th>模式低云量</th><th>谷地RH</th><th>谷雾条件</th><th>云顶</th><th>类型</th><th>封盖 K/km</th><th>山顶 RH</th><th>日出可见条件指数</th><th>朝霞</th><th>中高云</th><th>气温</th><th>风 m/s</th></tr></thead>
-    <tbody>${rows}<tr class="mean"><td>集合平均</td><td>${r0(d.sea.mean, '/100')}</td><td>${r0(d.lowCloud.mean, '%')}</td><td>${r0(d.valleyRH.mean, '%')}</td><td>${d.valleyFogVotes}/${Object.keys(d.models).length} 模式</td><td>${r0(d.ztop.mean, ' m')}</td><td>${TYPE[d.type]}</td><td>${r1(d.cap.mean)}</td><td>—</td>
+    <tbody>${rows}<tr class="mean"><td>集合平均</td><td>${r0(d.sea.mean, '/100')}</td><td>${r0(d.lowCloud.mean, '%')}</td><td>${r0(d.valleyRH.mean, '%')}</td><td>${d.valleyRH.n ? `${d.valleyFogVotes}/${d.valleyRH.n}` : '谷地资料不可用'}</td><td>${r0(d.ztop.mean, ' m')}</td><td>${TYPE[d.type]}</td><td>${r1(d.cap.mean)}</td><td>—</td>
       <td>${r0(d.vis.mean, '/100')}</td><td>${r0(d.glow.mean)}</td><td>—</td><td>${r1(d.hike.T.mean, '°')}</td><td>${r1(d.hike.ws.mean)}</td></tr></tbody></table>`;
 }
 
@@ -445,7 +445,7 @@ function renderLiveDiagnostic(h, a) {
   el.innerHTML = `<div class="ld-head"><b>逐小时诊断</b><span>${h.local.slice(5, 16).replace('T', ' ')}</span></div>
     <div class="ld-main"><div><small>云海条件指数（非概率）</small><strong>${scoreText(h.P.mean)}<em>${h.P.mean == null ? '未计算' : '/100'}</em></strong></div>
     <div><small>云顶估计</small><strong class="ld-top">${cloudText}</strong></div></div>
-    <div class="ld-status">${sky} · 山顶网格低云 ${r0(a.cl.mean, '%')} · 谷地RH ${r0(valleyMeanRH, '%')} · 谷雾线索 ${valleyVotes}/${nTotal}</div>
+    <div class="ld-status">${sky} · 山顶网格低云 ${r0(a.cl.mean, '%')} · 谷地RH ${r0(valleyMeanRH, '%')} · 谷雾线索 ${valleyRH.length ? `${valleyVotes}/${valleyRH.length}` : '资料不可用'}</div>
     <div class="ld-meta"><span>${quality}</span><span>有效评分 ${nScore}/${nTotal}</span></div>
     <p>${h.P.mean === 0 ? '0 是计算条件指数，不代表出现云海的真实概率为 0%。' : h.P.mean == null ? '缺少可计算的云顶或输入数据；不以零代替。' : '3D 云面为示意，不是实际云区覆盖范围。'} 请结合现场观测与官方气象预警。</p>`;
 }
