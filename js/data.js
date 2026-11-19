@@ -35,21 +35,25 @@ async function cachePut(url, j) {
   } catch { /* 存储满或不可用时忽略 */ }
 }
 
-async function getJSON(url, tries = 3) {
+async function getJSON(url, tries = 3, timeoutMs = 25000) {
   const hit = await cacheGet(url);
   if (hit) return hit;
   let last;
   for (let k = 0; k < tries; k++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: controller.signal });
       const j = await r.json().catch(() => null);
       if (r.ok && j && !j.error) { cachePut(url, j); return j; }
       last = new Error(j?.reason || `HTTP ${r.status}`);
       if (r.status === 400 || r.status === 429) break;
     } catch (e) {
-      last = e;
+      last = e?.name === 'AbortError' ? new Error(`天气接口超时（${timeoutMs / 1000} s）`) : e;
+    } finally {
+      clearTimeout(timer);
     }
-    await new Promise((res) => setTimeout(res, 600 * (k + 1)));
+    if (k + 1 < tries) await new Promise((res) => setTimeout(res, 600 * (k + 1)));
   }
   throw last;
 }
@@ -188,7 +192,9 @@ export async function fetchValleyForecast(point, modelIds) {
   const url = `${API}/forecast?latitude=${f4(point.lat)}&longitude=${f4(point.lon)}`
     + `&elevation=${Math.round(point.z)}&hourly=${Object.values(keys).join(',')}`
     + `&models=${modelIds.join(',')}&timezone=auto&forecast_days=7&past_days=1&wind_speed_unit=ms`;
-  const response = await getJSON(url);
+  // Optional enhancement: do not let the independent valley API hold the
+  // entire original 3D forecast UI behind a long network wait.
+  const response = await getJSON(url, 1, 12000);
   const H = response.hourly;
   if (!Array.isArray(H?.time)) throw new Error('谷地预报缺少时刻序列');
   const models = {};
