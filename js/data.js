@@ -1,5 +1,5 @@
 // 数据获取：Open-Meteo（多模式气压层预报、CAMS 气溶胶、地名检索）+ Mapterhorn 地形瓦片取高程（浏览器内解码，失败时退回 Open-Meteo DEM）
-import { LEVELS, HORIZON_DIST } from './model.js';
+import { LEVELS, HORIZON_DIST } from './model.js?v=20261119-r8';
 import { destination } from './sun.js';
 
 const API = 'https://api.open-meteo.com/v1';
