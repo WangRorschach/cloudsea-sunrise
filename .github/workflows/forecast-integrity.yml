@@ -23,5 +23,9 @@ jobs:
           node --check js/cloudsea.js
           node --check js/obs.js
           node --check test/forecast-integrity.mjs
+          node --check js/data.js
+          node --check test/valley-data.mjs
       - name: Regression tests (offline)
-        run: node test/forecast-integrity.mjs
+        run: |
+          node test/forecast-integrity.mjs
+          node test/valley-data.mjs
