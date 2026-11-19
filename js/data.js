@@ -126,9 +126,16 @@ export async function fetchSiteTerrain(lat, lon) {
   const ring = [];
   for (const r of [2000, 5000, 9000]) for (let b = 0; b < 360; b += 30) ring.push(destination(lat, lon, b, r));
   const el = await fetchElevations([[lat, lon], ...ring], [12, ...ring.map(() => 11)]);
-  const ringEl = el.slice(1).filter((x) => x != null).sort((a, b) => a - b);
-  const q = ringEl[Math.floor(ringEl.length * 0.15)] ?? el[0];
-  return { dem: el[0], valley: q, ringMin: ringEl[0], ringMax: ringEl[ringEl.length - 1] };
+  const samples = ring.map((ll, i) => ({ ll, z: el[i + 1] }))
+    .filter((x) => Number.isFinite(x.z)).sort((a, b) => a.z - b.z);
+  // Preserve the coordinates paired with the percentile DEM elevation.
+  // A valley weather forecast must be requested at that location, not the summit.
+  const chosen = samples[Math.floor(samples.length * 0.15)] ?? null;
+  return {
+    dem: el[0], valley: chosen?.z ?? el[0],
+    valleyPoint: chosen == null ? null : { lat: chosen.ll[0], lon: chosen.ll[1], z: chosen.z },
+    ringMin: samples[0]?.z ?? null, ringMax: samples.at(-1)?.z ?? null,
+  };
 }
 
 export function profileDistances() {
@@ -168,6 +175,32 @@ export async function fetchForecast(lat, lon, zObs, modelIds) {
     times: H.time.map((s) => parseLocal(s) - d.utc_offset_seconds * 1000),
     models,
   };
+}
+
+// Forecast a representative terrain-sampled valley point separately from
+// the observer summit. These are NWP grid estimates, not station observations.
+export async function fetchValleyForecast(point, modelIds) {
+  if (!point || !Number.isFinite(point.z) || !modelIds.length) return null;
+  const keys = {
+    T2: 'temperature_2m', RH2: 'relative_humidity_2m',
+    cl: 'cloud_cover_low', wind10: 'wind_speed_10m', precip: 'precipitation',
+  };
+  const url = `${API}/forecast?latitude=${f4(point.lat)}&longitude=${f4(point.lon)}`
+    + `&elevation=${Math.round(point.z)}&hourly=${Object.values(keys).join(',')}`
+    + `&models=${modelIds.join(',')}&timezone=auto&forecast_days=7&past_days=1&wind_speed_unit=ms`;
+  const response = await getJSON(url);
+  const H = response.hourly;
+  if (!Array.isArray(H?.time)) throw new Error('谷地预报缺少时刻序列');
+  const models = {};
+  for (const id of modelIds) {
+    const surf = {};
+    for (const [key, field] of Object.entries(keys)) {
+      const values = H[`${field}_${id}`] ?? (modelIds.length === 1 ? H[field] : null);
+      surf[key] = Array.isArray(values) ? values : null;
+    }
+    models[id] = surf;
+  }
+  return { point, localTimes: H.time, models, tz: response.timezone };
 }
 
 // 沿每天日出方位的远方云量（多模式）
