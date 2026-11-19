@@ -39,6 +39,7 @@ assert.equal(foggyValley.P, null, 'dry mountain profile cannot override humid fo
 assert.equal(foggyValley.diagnosis, 'unresolved-cloud-top');
 assert.match(foggyValley.diagnosisDetails, /谷地湿度 98%/);
 assert.equal(foggyValley.valleyFog.status, 'supportive');
+assert.equal(diagnoseValleyFog({ ...valleyFog, wind10: 12 }).status, 'mixed', 'windy valley should not be tagged as radiative fog supportive');
 assert.ok(foggyValley.valleyFog.score > 0, 'separate valley fog signal should be visible');
 const missingValley = analyzeCloudSea(dryProfile, { ...ctx, valley: null });
 assert.equal(missingValley.P, null, 'unavailable valley data must not imply fog-free valleys');
