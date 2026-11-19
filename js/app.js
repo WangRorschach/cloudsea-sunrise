@@ -3,7 +3,7 @@
 import { MODELS, runForecast } from './model.js?v=20261118-r7';
 import { findRise } from './sun.js';
 import {
-  fetchSiteTerrain, fetchForecast, fetchHorizon, fetchAirQuality, fetchTerrainProfile,
+  fetchSiteTerrain, fetchForecast, fetchValleyForecast, fetchHorizon, fetchAirQuality, fetchTerrainProfile,
 } from './data.js';
 import { SPOTS } from './spots.js';
 import * as M from './map.js';
@@ -30,7 +30,7 @@ const dailyDataNote = (d) => {
 const WEEK = '日一二三四五六';
 
 const S = {
-  site: null, res: null, fc: null, terrain: null, ter: null,
+  site: null, res: null, fc: null, valley: null, terrain: null, ter: null,
   day: 0, hour: 0, model: null, loading: 0, playTimer: null, grid: null, spots: null, aggCache: new Map(),
 };
 const agg = (i) => {
@@ -68,6 +68,7 @@ async function loadSite(input, { fly = true } = {}) {
   stopPlay();
   const site = { name: input.name, lat: +input.lat, lon: +input.lon, preset: input.preset ?? null, zObs: input.zObs ?? null };
   S.site = site;
+  S.valley = null;
   M.setSite(site, { fly });
   $('#q').value = '';
   $('#days').innerHTML = '<div class="skeleton"></div>'.repeat(5);
@@ -80,6 +81,7 @@ async function loadSite(input, { fly = true } = {}) {
     site.dem = ter.dem;
     if (site.zObs == null) site.zObs = site.preset ?? ter.dem ?? 0;
     site.zValley = Math.min(ter.valley ?? site.zObs - 300, site.zObs - 50);
+    site.valleySample = ter.valleyPoint?.z < site.zObs - 50 ? ter.valleyPoint : null;
     $('#alt').value = Math.round(site.zObs);
     writeHash();
     renderSite();
@@ -89,13 +91,18 @@ async function loadSite(input, { fly = true } = {}) {
 
     status('下载 5 个全球模式的气压层廓线与地面要素…');
     const ids = MODELS.map((m) => m.id);
-    const [fc, aq] = await Promise.all([
+    const [fc, aq, valley] = await Promise.all([
       fetchForecast(site.lat, site.lon, site.zObs, ids),
       fetchAirQuality(site.lat, site.lon).catch(() => null),
+      fetchValleyForecast(site.valleySample, ids).catch((err) => {
+        console.warn('谷地独立天气样本加载失败：将保留未知状态，不伪造零分', err);
+        return null;
+      }),
     ]);
     if (job !== S.loading) return;
     S.fc = fc;
-    const pre = runForecast({ fc, site, horizon: null, aq, terrain: null });
+    S.valley = valley;
+    const pre = runForecast({ fc, site, horizon: null, aq, terrain: null, valley });
     if (!pre.models.length) throw new Error('该位置暂无可用的模式气压层数据');
     const az = pre.days.map((d) => d.geo.sea.azimuth);
     const refAz = pre.days.find((d) => !d.past)?.geo.sea.azimuth ?? az[0];
@@ -107,7 +114,7 @@ async function loadSite(input, { fly = true } = {}) {
     ]);
     if (job !== S.loading) return;
     S.terrain = terrain;
-    S.res = runForecast({ fc, site, horizon, aq, terrain });
+    S.res = runForecast({ fc, site, horizon, aq, terrain, valley });
     S.aggCache = new Map();
     S.horizonOk = !!horizon;
     O.snapshotForecast(site, S.res.days);
@@ -154,11 +161,13 @@ function renderSite() {
       <div>观测海拔<b>${r0(s.zObs, ' m')}</b></div>
       <div>DEM 海拔<b>${r0(s.dem, ' m')}</b></div>
       <div>周边谷底<b>${r0(s.zValley, ' m')}</b></div>
+      <div>谷地预报采样<b>${s.valleySample ? `${r0(s.valleySample.z)} m` : '不可用'}</b></div>
       <div>相对高差<b>${r0(rel, ' m')}</b></div>
       <div>模式格点<b>${fc ? r0(fc.gridElevation, ' m') : '—'}</b></div>
       <div>可用模式<b>${S.res ? `${S.res.models.length} / ${MODELS.length}` : '—'}</b></div>
     </div>
-    ${warn.map((w) => `<div class="warnline">⚠ ${w}</div>`).join('')}`;
+    ${warn.map((w) => `<div class="warnline">⚠ ${w}</div>`).join('')}
+    ${s.valleySample && S.res ? `<div class="warnline">谷地预报：${S.valley ? '已取得独立模式网格，非现场观测' : '接口不可用；谷雾条件暂无法排除'} · ${s.valleySample.lat.toFixed(3)}°, ${s.valleySample.lon.toFixed(3)}°</div>` : ''}`;
 }
 
 // ---------- 7 天卡片 ----------
